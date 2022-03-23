@@ -1,3 +1,4 @@
+from turtle import circle
 import cv2
 import pyzbar.pyzbar as pyzbar
 import numpy as np
@@ -6,8 +7,12 @@ import sys
 W_REF = 0.0
 H_REF = 0.0
 
+dstPoints = 15*np.array([np.array((2.0,2.0)),
+                    np.array((11.6+2.0,2.0)),
+                    np.array((0.0+2.0,18.4+2.0)),
+                    np.array((11.6+2.0,18.4+2.0)),])
 
-def display(im, decodedObjects):
+def display(im, decodedObjects, message="Results"):
     # Loop over all decoded objects
 
     for decodedObject in decodedObjects:
@@ -27,15 +32,18 @@ def display(im, decodedObjects):
         n = len(hull)
         # Draw the convext hull
         for j in range(0, n):
-            cv2.line(im, hull[j], hull[(j + 1) % n], (255, 0, 0), 3)
+            cv2.line(im, hull[j], hull[(j + 1) % n], (255, 0, 0), 2)
 
     # Display results
-    cv2.imshow("Results", im)
-
+    cv2.imshow(message, im)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
 class QRDecoder:
     def __init__(self):
-        self.cap = cv2.VideoCapture(1)
+        self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+        self.cap.set(3,640)
+        self.cap.set(4,480)
         self.h_corr = 1.0
         self.w_corr = 1.0
 
@@ -45,30 +53,41 @@ class QRDecoder:
         while len(decodedObjects) != 4:
             _, img = self.cap.read()
             decodedObjects = pyzbar.decode(img)
-            cv2.imshow("Results", img)
             if cv2.waitKey(1) == ord("q"):
                 cv2.waitKey(1)
                 cv2.destroyAllWindows()
-
                 sys.exit()
-
+        
+        display(img, decodedObjects, message="Detected beacons")
+        
         centers = {}
         for obj in decodedObjects:
             data = obj.data
-            left, top, width, height = obj.rect
-
-            top_left = np.array([top, left])
-            top_right = np.array([top, left + width])
-            bottom_left = np.array([top - height, left])
-            bottom_right = np.array([top - height, left + width])
-
-            center = (top_left + top_right + bottom_left + bottom_right) / 4
+            points = obj.polygon
+            points = np.array([point for point in points])
+            center = np.sum(points, axis=0) / 4
+            center = center.astype(int)
             centers[data] = center
+            cv2.circle(img, tuple(center), 1, (0, 0, 255), 5)
 
-        top_left = centers["top_left_ref"]
-        top_right = centers["top_right_ref"]
-        bottom_left = centers["bottom_left_ref"]
+        cv2.imshow("", img)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
+        top_left = centers[b"top_left_ref"]
+        print(top_left)
+        top_right = centers[b"top_right_ref"]
+        bottom_left = centers[b"http://bottom_left_ref"]
+        bottom_right = centers[b"bottom_right_ref"]
+        srcPoints = np.array([top_left, top_right, bottom_left, bottom_right])
+        print(srcPoints)
+        print(dstPoints)
+        H, _ = cv2.findHomography(srcPoints, dstPoints)
+        img_warp = cv2.warpPerspective(img, H, (img.shape[1], img.shape[0]))
+        cv2.imshow("warp", img_warp)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+        exit(H)
         h_obs = bottom_left[0] - top_left[0]
         w_obs = top_left[1] - top_left[1]
 
