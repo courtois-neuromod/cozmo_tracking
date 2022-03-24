@@ -1,18 +1,11 @@
-from turtle import circle
+"using getperspective instead of homography"
+
 import cv2
 import pyzbar.pyzbar as pyzbar
 import numpy as np
 import sys
 
-W_REF = 0.0
-H_REF = 0.0
-
-dstPoints = 15*np.array([np.array((6.0,6.0)),
-                    np.array((11.6+6.0,6.0)),
-                    np.array((0.0+6.0,18.4+6.0)),
-                    np.array((11.6+6.0,18.4+6.0)),])
-
-def display(im, decodedObjects, message="Results"): 
+def display(im, decodedObjects, message="Results"):
     # Loop over all decoded objects
 
     for decodedObject in decodedObjects:
@@ -36,16 +29,22 @@ def display(im, decodedObjects, message="Results"):
 
     # Display results
     cv2.imshow(message, im)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
-
+    cv2.waitKey(1)
+    #cv2.destroyAllWindows()
+ 
 class QRDecoder:
     def __init__(self):
         self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-        self.cap.set(3,640)
-        self.cap.set(4,480)
+        focus = 0  # min: 0, max: 255, increment:5
+        self.cap.set(28, focus)
+      
         self.h_corr = 1.0
         self.w_corr = 1.0
+        self.P = None
+        self.dstPoints = None
+        self.srcPoints = None
+        self.max_w = None
+        self.max_h = None
 
     def calibration(self):
         decodedObjects = []
@@ -53,12 +52,14 @@ class QRDecoder:
         while len(decodedObjects) != 4:
             _, img = self.cap.read()
             decodedObjects = pyzbar.decode(img)
+            display(img, decodedObjects, message="Detected beacons")
             if cv2.waitKey(1) == ord("q"):
                 cv2.waitKey(1)
                 cv2.destroyAllWindows()
                 sys.exit()
         
         display(img, decodedObjects, message="Detected beacons")
+        cv2.destroyAllWindows()
         
         centers = {}
         for obj in decodedObjects:
@@ -75,35 +76,60 @@ class QRDecoder:
         cv2.destroyAllWindows()
 
         top_left = centers[b"top_left_ref"]
-        print(top_left)
         top_right = centers[b"top_right_ref"]
         bottom_left = centers[b"http://bottom_left_ref"]
         bottom_right = centers[b"bottom_right_ref"]
-        srcPoints = np.array([top_left, top_right, bottom_left, bottom_right])
-        print(srcPoints)
-        print(dstPoints)
-        H, _ = cv2.findHomography(srcPoints, dstPoints)
-        img_warp = cv2.warpPerspective(img, H, (img.shape[1], img.shape[0]))
+
+        w_a = np.sqrt( (top_left[0] - bottom_left[0])**2 + (top_left[1] - bottom_left[1])**2 ) 
+        w_b = np.sqrt( (top_right[0] - bottom_right[0])**2 + (top_right[1] - bottom_right[1])**2 ) 
+        h_a = np.sqrt( (top_left[0] - top_right[0])**2 + (top_left[1] - top_right[1])**2 ) 
+        h_b = np.sqrt( (bottom_left[0] - bottom_right[0])**2 + (bottom_left[1] - bottom_right[1])**2 ) 
+
+        self.max_w = max(int(w_a), int(w_b))
+        self.max_h = max(int(h_a), int(h_b))
+
+        self.dstPoints = np.array([
+                [0, 0],
+                [self.max_w - 1, 0],
+                [self.max_w - 1, self.max_h - 1],
+                [0, self.max_h - 1]], dtype = "float32")
+
+        self.srcPoints = np.array([top_left, top_right, bottom_right, bottom_left,], dtype = "float32")
+
+        self.P = cv2.getPerspectiveTransform(self.srcPoints, self.dstPoints)
+        img_warp = cv2.warpPerspective(img, self.P, (self.max_w, self.max_h))
+
         cv2.imshow("warp", img_warp)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
-        exit(H)
-        h_obs = bottom_left[0] - top_left[0]
-        w_obs = top_left[1] - top_left[1]
-
-        self.h_corr = 1 - (h_obs / H_REF)
-        self.w_corr = 1 - (w_obs / W_REF)
-
+        
     def decode(self, im):
         decodedObjects = pyzbar.decode(im)
-
+        robot = None
         if not decodedObjects:
             return None, None
-
         for obj in decodedObjects:
             if obj.data == "robot":
                 robot = obj
                 break
+        if not robot:
+            print("miss")
+            return None, None
+        points = robot.polygon
+        points = np.array([point for point in points])
+        center = np.sum(points, axis=0) / 4
+        center = center.astype(int)
+        cv2.circle(im, tuple(center), 1, (0, 0, 255), 5)
+
+        """ im_warp = cv2.warpPerspective(im, self.P, (self.max_w, self.max_h))
+
+        cv2.imshow("warp", im_warp) """
+        cv2.imshow("found", im)
+        cv2.waitKey(1)
+        #cv2.destroyAllWindows()
+        return
+        #exit(0)
+
 
         left, top, width, height = robot.rect
 
