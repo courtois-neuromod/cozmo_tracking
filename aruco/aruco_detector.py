@@ -3,6 +3,9 @@ import numpy as np
 import sys
 import time
 
+MAP_H_IRL = 23.0
+MAP_W_IRL = 15.2
+
 ARUCO_DICT = {
 	"DICT_4X4_50": cv2.aruco.DICT_4X4_50,
 	"DICT_4X4_100": cv2.aruco.DICT_4X4_100,
@@ -60,15 +63,21 @@ class ArUcoDecoder:
         self.arucoParams = cv2.aruco.DetectorParameters_create()
         
         self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-        focus = 0  # min: 0, max: 255, increment:5
-        self.cap.set(28, focus) 
-        time.sleep(1.0)
+        self.set_cap_prop()
+        time.sleep(2.0)
 
         self.img = None
         self.P = None
-        self.dstPoints = None
-        self.srcPoints = None
         self.ref_centers = {}
+
+    def set_cap_prop(self):
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+        self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
+        self.cap.set(cv2.CAP_PROP_FOCUS, 0)
+        w = self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+        h = self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+        print("resolution (w x h): {} x {}".format(w, h))
 
     def draw_corners(self, corners, ids):
         
@@ -139,23 +148,22 @@ class ArUcoDecoder:
         self.max_h = zoom*max(int(w_a), int(w_b))
         self.max_w = zoom*max(int(h_a), int(h_b))
         
-        self.dstPoints = np.array([
+        dstPoints = np.array([
                 [0, 0],
                 [self.max_w - 1, 0],
                 [self.max_w - 1, self.max_h - 1],
                 [0, self.max_h - 1]], dtype = "float32")
 
-        self.srcPoints = np.array([top_left, top_right, bottom_right, bottom_left,], dtype = "float32")
+        srcPoints = np.array([top_left, top_right, bottom_right, bottom_left,], dtype = "float32")
 
-        self.P = cv2.getPerspectiveTransform(self.srcPoints, self.dstPoints)
+        self.P = cv2.getPerspectiveTransform(srcPoints, dstPoints)
         img_warp = cv2.warpPerspective(self.img, self.P, (self.max_w, self.max_h))
 
         cv2.imshow("warp", img_warp)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
         
-    def decode(self, im):
-        _, self.img = self.cap.read()
+    def decode(self):
         (corners, ids, _) = cv2.aruco.detectMarkers(self.img, self.arucoDict, parameters=self.arucoParams)            
         self.draw_corners(corners, ids)
         cv2.imshow("Frame", self.img)
@@ -164,24 +172,26 @@ class ArUcoDecoder:
         robot = np.append(robot, 1)
         robot = np.reshape(robot, (3,1))
         robot = np.matmul(self.P, robot)
-        robot = np.reshape(robot, (1, 3))
-        robot[0][1] *=23/self.max_h
-        robot[0][0] *= 15.2/self.max_w
         print(robot)
-        if cv2.waitKey(1) == ord("q"):
-            cv2.waitKey(1)
-            cv2.destroyAllWindows()
-            sys.exit()        
-
+        robot = np.reshape(robot, (1, 3))
+        exit(robot)
+        robot[0][1] *= MAP_H_IRL/self.max_h
+        robot[0][0] *= MAP_W_IRL/self.max_w
+        cv2.putText(self.img, "Cozmo - ({})".format(robot),
+                    (10.0, 10.0), cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5, (0, 255, 0), 2)
         self.img = cv2.warpPerspective(self.img, self.P, (self.max_w, self.max_h))
         cv2.imshow("warp", self.img)
+        if cv2.waitKey(1) == ord("q"):
+            cv2.destroyAllWindows()
+            sys.exit() 
 
         return
 
     def tracking(self):
         while True:
-            _, img = self.cap.read()
-            self.decode(img)
+            _, self.img = self.cap.read()
+            self.decode()
             
             if cv2.waitKey(1) == ord("q"):
                 cv2.waitKey(1)
@@ -191,8 +201,7 @@ class ArUcoDecoder:
 
 
 def main():
-    decoder = ArUcoDecoder()
-   
+    decoder = ArUcoDecoder()   
     decoder.calibration()
     key = input("Once Cozmo is set, press any litteral key to continue.")
     if key:
