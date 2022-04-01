@@ -80,7 +80,7 @@ class ArUcoDecoder:
         print("resolution (w x h): {} x {}".format(w, h))
 
     def draw_corners(self, corners, ids):
-        
+        self.img = cv2.cvtColor(self.img, cv2.COLOR_GRAY2RGB)
         # verify *at least* one ArUco marker was detected
         if len(corners) > 0:
             # flatten the ArUco IDs list
@@ -121,14 +121,16 @@ class ArUcoDecoder:
         ids = []
         while ids is None or len(ids) != 4:
             _, self.img = self.cap.read()
-            (corners, ids, _) = cv2.aruco.detectMarkers(self.img, self.arucoDict, parameters=self.arucoParams)            
-            cv2.imshow("", self.img)
+            self.img = cv2.cvtColor(self.img, cv2.COLOR_BGR2GRAY)
+            (corners, ids, _) = cv2.aruco.detectMarkers(self.img, self.arucoDict, parameters=self.arucoParams)  
+            self.draw_corners(corners, ids)          
+            cv2.imshow("Calibration", self.img)
             if cv2.waitKey(1) == ord("q"):
                 cv2.waitKey(1)
                 cv2.destroyAllWindows()
                 sys.exit()
+
         cv2.destroyAllWindows()
-        self.draw_corners(corners, ids)
         cv2.imshow("Detected ref", self.img)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
@@ -167,21 +169,20 @@ class ArUcoDecoder:
         (corners, ids, _) = cv2.aruco.detectMarkers(self.img, self.arucoDict, parameters=self.arucoParams)            
         self.draw_corners(corners, ids)
         cv2.imshow("Frame", self.img)
-
-        robot = np.asarray(self.ref_centers["5"])
-        robot = np.append(robot, 1)
-        robot = np.reshape(robot, (3,1))
-        robot = np.matmul(self.P, robot)
-        print(robot)
-        robot = np.reshape(robot, (1, 3))
-        exit(robot)
-        robot[0][1] *= MAP_H_IRL/self.max_h
-        robot[0][0] *= MAP_W_IRL/self.max_w
-        cv2.putText(self.img, "Cozmo - ({})".format(robot),
-                    (10.0, 10.0), cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5, (0, 255, 0), 2)
         self.img = cv2.warpPerspective(self.img, self.P, (self.max_w, self.max_h))
+        self.img = cv2.copyMakeBorder(self.img, 50, 50, 50, 50, cv2.BORDER_CONSTANT)  
+        if ids is not None and 5 in ids:
+            robot = np.asarray(self.ref_centers["5"])
+            robot = np.append(robot, 1)
+            robot = np.matmul(self.P, np.transpose(robot))
+            robot[1] *= MAP_H_IRL/self.max_h
+            robot[0] *= MAP_W_IRL/self.max_w
+            cv2.putText(self.img, "Robot's position: ({:.2f}, {:.2f})".format(robot[0], robot[1]),
+            (30, 30), cv2.FONT_HERSHEY_SIMPLEX,
+            0.5, (0, 0, 255), 1)  
+            
         cv2.imshow("warp", self.img)
+        
         if cv2.waitKey(1) == ord("q"):
             cv2.destroyAllWindows()
             sys.exit() 
@@ -191,6 +192,7 @@ class ArUcoDecoder:
     def tracking(self):
         while True:
             _, self.img = self.cap.read()
+            self.img = cv2.cvtColor(self.img, cv2.COLOR_BGR2GRAY)
             self.decode()
             
             if cv2.waitKey(1) == ord("q"):
@@ -203,9 +205,8 @@ class ArUcoDecoder:
 def main():
     decoder = ArUcoDecoder()   
     decoder.calibration()
-    key = input("Once Cozmo is set, press any litteral key to continue.")
-    if key:
-        decoder.tracking()
+    time.sleep(1)
+    decoder.tracking()
     cv2.waitKey(1)
     cv2.destroyAllWindows()
 
