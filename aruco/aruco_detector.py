@@ -66,7 +66,7 @@ class ArUcoDecoder:
         self.arucoDict = cv2.aruco.Dictionary_get(ARUCO_DICT["DICT_5X5_100"])
         self.arucoParams = cv2.aruco.DetectorParameters_create()
         
-        self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+        self.cap = cv2.VideoCapture("/dev/video2")
         self.set_cap_prop()
         time.sleep(2.0)
 
