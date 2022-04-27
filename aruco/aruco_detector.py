@@ -7,65 +7,46 @@ import numpy as np
 import sys
 import time
 
+# Maze H and W (to modify depending on the physical setup)
 MAP_H_IRL = 23.0
 MAP_W_IRL = 15.2
 
+# Camera resolution
+CAM_W = 1920
+CAM_H = 1080
+
 ARUCO_DICT = {
-	"DICT_4X4_50": cv2.aruco.DICT_4X4_50,
-	"DICT_4X4_100": cv2.aruco.DICT_4X4_100,
-	"DICT_4X4_250": cv2.aruco.DICT_4X4_250,
-	"DICT_4X4_1000": cv2.aruco.DICT_4X4_1000,
-	"DICT_5X5_50": cv2.aruco.DICT_5X5_50,
-	"DICT_5X5_100": cv2.aruco.DICT_5X5_100,
-	"DICT_5X5_250": cv2.aruco.DICT_5X5_250,
-	"DICT_5X5_1000": cv2.aruco.DICT_5X5_1000,
-	"DICT_6X6_50": cv2.aruco.DICT_6X6_50,
-	"DICT_6X6_100": cv2.aruco.DICT_6X6_100,
-	"DICT_6X6_250": cv2.aruco.DICT_6X6_250,
-	"DICT_6X6_1000": cv2.aruco.DICT_6X6_1000,
-	"DICT_7X7_50": cv2.aruco.DICT_7X7_50,
-	"DICT_7X7_100": cv2.aruco.DICT_7X7_100,
-	"DICT_7X7_250": cv2.aruco.DICT_7X7_250,
-	"DICT_7X7_1000": cv2.aruco.DICT_7X7_1000,
-	"DICT_ARUCO_ORIGINAL": cv2.aruco.DICT_ARUCO_ORIGINAL,
-	"DICT_APRILTAG_16h5": cv2.aruco.DICT_APRILTAG_16h5,
-	"DICT_APRILTAG_25h9": cv2.aruco.DICT_APRILTAG_25h9,
-	"DICT_APRILTAG_36h10": cv2.aruco.DICT_APRILTAG_36h10,
-	"DICT_APRILTAG_36h11": cv2.aruco.DICT_APRILTAG_36h11
+    "DICT_4X4_50": cv2.aruco.DICT_4X4_50,
+    "DICT_4X4_100": cv2.aruco.DICT_4X4_100,
+    "DICT_4X4_250": cv2.aruco.DICT_4X4_250,
+    "DICT_4X4_1000": cv2.aruco.DICT_4X4_1000,
+    "DICT_5X5_50": cv2.aruco.DICT_5X5_50,
+    "DICT_5X5_100": cv2.aruco.DICT_5X5_100,
+    "DICT_5X5_250": cv2.aruco.DICT_5X5_250,
+    "DICT_5X5_1000": cv2.aruco.DICT_5X5_1000,
+    "DICT_6X6_50": cv2.aruco.DICT_6X6_50,
+    "DICT_6X6_100": cv2.aruco.DICT_6X6_100,
+    "DICT_6X6_250": cv2.aruco.DICT_6X6_250,
+    "DICT_6X6_1000": cv2.aruco.DICT_6X6_1000,
+    "DICT_7X7_50": cv2.aruco.DICT_7X7_50,
+    "DICT_7X7_100": cv2.aruco.DICT_7X7_100,
+    "DICT_7X7_250": cv2.aruco.DICT_7X7_250,
+    "DICT_7X7_1000": cv2.aruco.DICT_7X7_1000,
+    "DICT_ARUCO_ORIGINAL": cv2.aruco.DICT_ARUCO_ORIGINAL,
+    "DICT_APRILTAG_16h5": cv2.aruco.DICT_APRILTAG_16h5,
+    "DICT_APRILTAG_25h9": cv2.aruco.DICT_APRILTAG_25h9,
+    "DICT_APRILTAG_36h10": cv2.aruco.DICT_APRILTAG_36h10,
+    "DICT_APRILTAG_36h11": cv2.aruco.DICT_APRILTAG_36h11,
 }
 
-def display(im, decodedObjects, message="Results"):
-    # Loop over all decoded objects
-
-    for decodedObject in decodedObjects:
-
-        points = decodedObject.polygon
-        # If the points do not form a quad, find convex hull
-        if len(points) > 4:
-            hull = cv2.convexHull(
-                np.array([point for point in points], dtype=np.float32)
-            )
-            hull = list(map(tuple, np.squeeze(hull)))
-
-        else:
-            hull = points
-
-        # Number of points in the convex hull
-        n = len(hull)
-        # Draw the convext hull
-        for j in range(0, n):
-            cv2.line(im, hull[j], hull[(j + 1) % n], (255, 0, 0), 2)
-
-    # Display results
-    cv2.imshow(message, im)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
 
 class ArUcoDecoder:
+    """ArUco markers decoder class"""
+
     def __init__(self):
         self.arucoDict = cv2.aruco.Dictionary_get(ARUCO_DICT["DICT_5X5_100"])
         self.arucoParams = cv2.aruco.DetectorParameters_create()
-        
+
         self.cap = cv2.VideoCapture("/dev/video2")
         self.set_cap_prop()
         time.sleep(2.0)
@@ -75,15 +56,20 @@ class ArUcoDecoder:
         self.ref_centers = {}
 
     def set_cap_prop(self):
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+        """Camera setting function"""
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAM_W)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAM_H)
         self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
         self.cap.set(cv2.CAP_PROP_FOCUS, 0)
-        w = self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)
-        h = self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
-        print("resolution (w x h): {} x {}".format(w, h))
 
     def draw_corners(self, corners, ids):
+        """Drawing function, adding corners and ids of detected markers onto the displayed feed.
+
+        :param corners: list of detected markers' coordinates
+        :type corners: list
+        :param ids: list of detected markers' IDs
+        :type ids: list
+        """
         self.img = cv2.cvtColor(self.img, cv2.COLOR_GRAY2RGB)
         # verify *at least* one ArUco marker was detected
         if len(corners) > 0:
@@ -101,13 +87,13 @@ class ArUcoDecoder:
                 bottomRight = (int(bottomRight[0]), int(bottomRight[1]))
                 bottomLeft = (int(bottomLeft[0]), int(bottomLeft[1]))
                 topLeft = (int(topLeft[0]), int(topLeft[1]))
-                
+
                 # draw the bounding box of the ArUCo detection
                 cv2.line(self.img, topLeft, topRight, (0, 255, 0), 1)
                 cv2.line(self.img, topRight, bottomRight, (0, 255, 0), 1)
                 cv2.line(self.img, bottomRight, bottomLeft, (0, 255, 0), 1)
                 cv2.line(self.img, bottomLeft, topLeft, (0, 255, 0), 1)
-                
+
                 # compute and draw the center (x, y)-coordinates of the ArUco
                 # marker
                 cX = int((topLeft[0] + bottomRight[0]) / 2.0)
@@ -115,19 +101,29 @@ class ArUcoDecoder:
                 center = (cX, cY)
                 self.ref_centers[str(markerID)] = center
                 cv2.circle(self.img, center, 2, (0, 0, 255), -1)
-                
+
                 # draw the ArUco marker ID on the image
-                cv2.putText(self.img, str(markerID),
-                    (topLeft[0], topLeft[1] - 15), cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5, (0, 255, 0), 2)
-            
+                cv2.putText(
+                    self.img,
+                    str(markerID),
+                    (topLeft[0], topLeft[1] - 15),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    (0, 255, 0),
+                    2,
+                )
+
     def calibration(self):
+        """Initialization function, detecting the 4 ArUco markers located in the corners, and deriving the homography matrix between the camera's and the floor's planes."""
+
         ids = []
         while ids is None or len(ids) != 4:
             _, self.img = self.cap.read()
             self.img = cv2.cvtColor(self.img, cv2.COLOR_BGR2GRAY)
-            (corners, ids, _) = cv2.aruco.detectMarkers(self.img, self.arucoDict, parameters=self.arucoParams)  
-            self.draw_corners(corners, ids)          
+            (corners, ids, _) = cv2.aruco.detectMarkers(
+                self.img, self.arucoDict, parameters=self.arucoParams
+            )
+            self.draw_corners(corners, ids)
             cv2.imshow("Calibration", self.img)
             if cv2.waitKey(1) == ord("q"):
                 cv2.waitKey(1)
@@ -144,23 +140,45 @@ class ArUcoDecoder:
         bottom_left = self.ref_centers["3"]
         bottom_right = self.ref_centers["4"]
 
-        w_a = np.sqrt( (top_left[0] - bottom_left[0])**2 + (top_left[1] - bottom_left[1])**2 ) 
-        w_b = np.sqrt( (top_right[0] - bottom_right[0])**2 + (top_right[1] - bottom_right[1])**2 ) 
-        h_a = np.sqrt( (top_left[0] - top_right[0])**2 + (top_left[1] - top_right[1])**2 ) 
-        h_b = np.sqrt( (bottom_left[0] - bottom_right[0])**2 + (bottom_left[1] - bottom_right[1])**2 ) 
+        w_a = np.sqrt(
+            (top_left[0] - bottom_left[0]) ** 2 + (top_left[1] - bottom_left[1]) ** 2
+        )
+        w_b = np.sqrt(
+            (top_right[0] - bottom_right[0]) ** 2
+            + (top_right[1] - bottom_right[1]) ** 2
+        )
+        h_a = np.sqrt(
+            (top_left[0] - top_right[0]) ** 2 + (top_left[1] - top_right[1]) ** 2
+        )
+        h_b = np.sqrt(
+            (bottom_left[0] - bottom_right[0]) ** 2
+            + (bottom_left[1] - bottom_right[1]) ** 2
+        )
 
         zoom = 5
 
-        self.max_h = zoom*max(int(w_a), int(w_b))
-        self.max_w = zoom*max(int(h_a), int(h_b))
-        
-        dstPoints = np.array([
+        self.max_h = zoom * max(int(w_a), int(w_b))
+        self.max_w = zoom * max(int(h_a), int(h_b))
+
+        dstPoints = np.array(
+            [
                 [0, 0],
                 [self.max_w - 1, 0],
                 [self.max_w - 1, self.max_h - 1],
-                [0, self.max_h - 1]], dtype = "float32")
+                [0, self.max_h - 1],
+            ],
+            dtype="float32",
+        )
 
-        srcPoints = np.array([top_left, top_right, bottom_right, bottom_left,], dtype = "float32")
+        srcPoints = np.array(
+            [
+                top_left,
+                top_right,
+                bottom_right,
+                bottom_left,
+            ],
+            dtype="float32",
+        )
 
         self.P = cv2.getPerspectiveTransform(srcPoints, dstPoints)
         img_warp = cv2.warpPerspective(self.img, self.P, (self.max_w, self.max_h))
@@ -168,37 +186,47 @@ class ArUcoDecoder:
         cv2.imshow("warp", img_warp)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
-        
+
     def decode(self):
-        (corners, ids, _) = cv2.aruco.detectMarkers(self.img, self.arucoDict, parameters=self.arucoParams)            
+        """Decoding function, detecting markers present in the received image, and computing the robot's position in the maze's reference frame."""
+        (corners, ids, _) = cv2.aruco.detectMarkers(
+            self.img, self.arucoDict, parameters=self.arucoParams
+        )
         self.draw_corners(corners, ids)
         cv2.imshow("Frame", self.img)
         self.img = cv2.warpPerspective(self.img, self.P, (self.max_w, self.max_h))
-        self.img = cv2.copyMakeBorder(self.img, 50, 50, 50, 50, cv2.BORDER_CONSTANT)  
+        self.img = cv2.copyMakeBorder(self.img, 50, 50, 50, 50, cv2.BORDER_CONSTANT)
         if ids is not None and 5 in ids:
             robot = np.asarray(self.ref_centers["5"])
             robot = np.append(robot, 1)
             robot = np.matmul(self.P, np.transpose(robot))
-            robot[1] *= MAP_H_IRL/self.max_h
-            robot[0] *= MAP_W_IRL/self.max_w
-            cv2.putText(self.img, "Robot's position: ({:.2f}, {:.2f})".format(robot[0], robot[1]),
-            (30, 30), cv2.FONT_HERSHEY_SIMPLEX,
-            0.5, (0, 0, 255), 1)  
-            
+            robot[1] *= MAP_H_IRL / self.max_h
+            robot[0] *= MAP_W_IRL / self.max_w
+            cv2.putText(
+                self.img,
+                "Robot's position: ({:.2f}, {:.2f})".format(robot[0], robot[1]),
+                (30, 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                (0, 0, 255),
+                1,
+            )
+
         cv2.imshow("warp", self.img)
-        
+
         if cv2.waitKey(1) == ord("q"):
             cv2.destroyAllWindows()
-            sys.exit() 
+            sys.exit()
 
         return
 
     def tracking(self):
+        """Tracking function, reading a frame from the camera and decoding it."""
         while True:
             _, self.img = self.cap.read()
             self.img = cv2.cvtColor(self.img, cv2.COLOR_BGR2GRAY)
             self.decode()
-            
+
             if cv2.waitKey(1) == ord("q"):
                 cv2.waitKey(1)
                 cv2.destroyAllWindows()
@@ -207,7 +235,7 @@ class ArUcoDecoder:
 
 
 def main():
-    decoder = ArUcoDecoder()   
+    decoder = ArUcoDecoder()
     decoder.calibration()
     time.sleep(1)
     decoder.tracking()
