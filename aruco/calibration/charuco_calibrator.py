@@ -1,4 +1,4 @@
-import cv2.aruco as aruco
+from cv2 import aruco
 from charuco_board_generator import make_board
 
 # Camera resolution

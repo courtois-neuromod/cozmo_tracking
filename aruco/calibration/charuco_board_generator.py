@@ -1,11 +1,10 @@
-import cv2.aruco as aruco
 import cv2
 import numpy as np
 
 
 def make_board(squaresX, squaresY, squareLength, markerLength, dictionary):
 
-    board = aruco.CharucoBoard_create(
+    board = cv2.aruco.CharucoBoard_create(
         squaresX, squaresY, squareLength, markerLength, dictionary
     )
     img = 0
