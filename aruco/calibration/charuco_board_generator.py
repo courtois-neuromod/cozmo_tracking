@@ -1,4 +1,3 @@
-from gettext import npgettext
 import cv2.aruco as aruco
 import cv2
 import numpy as np
