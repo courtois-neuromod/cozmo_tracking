@@ -113,6 +113,12 @@ class ArUcoDecoder:
                     2,
                 )
 
+    def resize(self, source, scale_percent = 50):
+        width = int(source.shape[1] * scale_percent / 100)
+        height = int(source.shape[0] * scale_percent / 100)
+        dim = (width, height)
+        source = cv2.resize(source, dim)
+
     def calibration(self):
         """Initialization function, detecting the 4 ArUco markers located in the corners, and deriving the homography matrix between the camera's and the floor's planes."""
 
@@ -124,6 +130,7 @@ class ArUcoDecoder:
                 self.img, self.arucoDict, parameters=self.arucoParams
             )
             self.draw_corners(corners, ids)
+            self.resize(source=self.img)
             cv2.imshow("Calibration", self.img)
             if cv2.waitKey(1) == ord("q"):
                 cv2.waitKey(1)
@@ -182,7 +189,7 @@ class ArUcoDecoder:
 
         self.P = cv2.getPerspectiveTransform(srcPoints, dstPoints)
         img_warp = cv2.warpPerspective(self.img, self.P, (self.max_w, self.max_h))
-
+        self.resize(source=img_warp)
         cv2.imshow("warp", img_warp)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
@@ -193,6 +200,7 @@ class ArUcoDecoder:
             self.img, self.arucoDict, parameters=self.arucoParams
         )
         self.draw_corners(corners, ids)
+        self.resize(source=self.img)
         cv2.imshow("Frame", self.img)
         self.img = cv2.warpPerspective(self.img, self.P, (self.max_w, self.max_h))
         self.img = cv2.copyMakeBorder(self.img, 50, 50, 50, 50, cv2.BORDER_CONSTANT)
@@ -212,6 +220,7 @@ class ArUcoDecoder:
                 1,
             )
 
+        self.resize(source=self.img)
         cv2.imshow("warp", self.img)
 
         if cv2.waitKey(1) == ord("q"):
