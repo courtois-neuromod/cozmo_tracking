@@ -8,7 +8,7 @@ def make_board(squaresX, squaresY, squareLength, markerLength, dictionary):
         squaresX, squaresY, squareLength, markerLength, dictionary
     )
     img = 0
-    img = board.draw((500, 700), marginSize=20)  
+    img = board.draw((500, 700), marginSize=20)
 
     cv2.imwrite("charuco_board.jpg", img)
     # cv2.imshow("board", img)
