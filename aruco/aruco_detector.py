@@ -6,14 +6,15 @@ import cv2
 import numpy as np
 import sys
 import time
+from random import randint
 
 # Maze H and W (to modify depending on the physical setup)
-MAP_H_IRL = 23.0
-MAP_W_IRL = 15.2
+MAP_H_IRL = 72.0 #23.0
+MAP_W_IRL = 110.4 #15.2
 
 # Camera resolution
-CAM_W = 1920
-CAM_H = 1080
+CAM_W = 11920
+CAM_H = 11080
 
 ARUCO_DICT = {
     "DICT_4X4_50": cv2.aruco.DICT_4X4_50,
@@ -39,6 +40,7 @@ ARUCO_DICT = {
     "DICT_APRILTAG_36h11": cv2.aruco.DICT_APRILTAG_36h11,
 }
 
+SOURCE = "/dev/video2"
 
 class ArUcoDecoder:
     """ArUco markers decoder class"""
@@ -47,7 +49,10 @@ class ArUcoDecoder:
         self.arucoDict = cv2.aruco.Dictionary_get(ARUCO_DICT["DICT_5X5_100"])
         self.arucoParams = cv2.aruco.DetectorParameters_create()
 
-        self.cap = cv2.VideoCapture("/dev/video2")
+        self.cap = cv2.VideoCapture(SOURCE)
+        if self.cap is None or not self.cap.isOpened():
+            print('Warning: unable to open video source: ', SOURCE)
+            sys.exit(0)
         self.set_cap_prop()
         time.sleep(2.0)
 
@@ -113,32 +118,32 @@ class ArUcoDecoder:
                     2,
                 )
 
-    def resize(self, source, scale_percent = 50):
+    def resize(self, source, scale_percent = 70):
         width = int(source.shape[1] * scale_percent / 100)
         height = int(source.shape[0] * scale_percent / 100)
         dim = (width, height)
-        source = cv2.resize(source, dim)
+        rs_img = cv2.resize(source, dim)
+        return rs_img
 
     def calibration(self):
         """Initialization function, detecting the 4 ArUco markers located in the corners, and deriving the homography matrix between the camera's and the floor's planes."""
 
         ids = []
-        while ids is None or len(ids) != 4:
+        while ids is None or not all(x in ids for x in [1, 2, 3, 4]):
             _, self.img = self.cap.read()
             self.img = cv2.cvtColor(self.img, cv2.COLOR_BGR2GRAY)
             (corners, ids, _) = cv2.aruco.detectMarkers(
                 self.img, self.arucoDict, parameters=self.arucoParams
             )
             self.draw_corners(corners, ids)
-            self.resize(source=self.img)
-            cv2.imshow("Calibration", self.img)
+            cv2.imshow("Calibration", self.resize(source=self.img))
             if cv2.waitKey(1) == ord("q"):
                 cv2.waitKey(1)
                 cv2.destroyAllWindows()
                 sys.exit()
 
         cv2.destroyAllWindows()
-        cv2.imshow("Detected ref", self.img)
+        cv2.imshow("Detected ref", self.resize(source=self.img))
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
@@ -186,11 +191,32 @@ class ArUcoDecoder:
             ],
             dtype="float32",
         )
-
+        print("wanted points: \n", dstPoints)
+        print("source points: \n", srcPoints)
         self.P = cv2.getPerspectiveTransform(srcPoints, dstPoints)
+        
+        irlPoints = np.array(
+            [
+                [0,0],
+                [MAP_W_IRL ,0],
+                [MAP_W_IRL, MAP_H_IRL],
+                [0, MAP_H_IRL],
+            ],
+            dtype="float32",
+        )
+
+        self.H = cv2.getPerspectiveTransform(srcPoints, irlPoints)
+
+        pt = np.array([[top_left[0], top_left[1], 1]])
+        print("Perspective matrix:\n", self.P)
+        print("Homography matrix:\n", self.H)
+        print("point:\n", pt)
+        print("Wrap:\n", np.matmul(self.P, np.transpose(pt)))
+        print("Wrap IRL:\n", np.matmul(self.H, np.transpose(pt)))
+
         img_warp = cv2.warpPerspective(self.img, self.P, (self.max_w, self.max_h))
-        self.resize(source=img_warp)
-        cv2.imshow("warp", img_warp)
+        
+        cv2.imshow("warp", self.resize(source=img_warp, scale_percent=40))
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
@@ -200,28 +226,30 @@ class ArUcoDecoder:
             self.img, self.arucoDict, parameters=self.arucoParams
         )
         self.draw_corners(corners, ids)
-        self.resize(source=self.img)
-        cv2.imshow("Frame", self.img)
+        cv2.imshow("Frame", self.resize(source=self.img))
         self.img = cv2.warpPerspective(self.img, self.P, (self.max_w, self.max_h))
-        self.img = cv2.copyMakeBorder(self.img, 50, 50, 50, 50, cv2.BORDER_CONSTANT)
+        self.img = cv2.copyMakeBorder(self.img, 100, 100, 100, 100, cv2.BORDER_CONSTANT)
+
         if ids is not None and 5 in ids:
             robot = np.asarray(self.ref_centers["5"])
             robot = np.append(robot, 1)
+            
             robot = np.matmul(self.P, np.transpose(robot))
+            robot /= robot[2]
             robot[1] *= MAP_H_IRL / self.max_h
             robot[0] *= MAP_W_IRL / self.max_w
+
             cv2.putText(
                 self.img,
                 "Robot's position: ({:.2f}, {:.2f})".format(robot[0], robot[1]),
-                (30, 30),
+                (30, 60),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.5,
+                2,
                 (0, 0, 255),
-                1,
+                2,
             )
 
-        self.resize(source=self.img)
-        cv2.imshow("warp", self.img)
+        cv2.imshow("warp", self.resize(source=self.img, scale_percent=50))
 
         if cv2.waitKey(1) == ord("q"):
             cv2.destroyAllWindows()
@@ -248,9 +276,6 @@ def main():
     decoder.calibration()
     time.sleep(1)
     decoder.tracking()
-    cv2.waitKey(1)
-    cv2.destroyAllWindows()
-
 
 if __name__ == "__main__":
     main()
