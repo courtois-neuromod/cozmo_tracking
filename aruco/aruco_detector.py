@@ -9,8 +9,8 @@ import time
 from random import randint
 
 # Maze H and W (to modify depending on the physical setup)
-MAP_H_IRL = 72.0 #23.0
-MAP_W_IRL = 110.4 #15.2
+MAP_H_IRL = 72.0  # 23.0
+MAP_W_IRL = 110.4  # 15.2
 
 # Camera resolution
 CAM_W = 11920
@@ -42,6 +42,7 @@ ARUCO_DICT = {
 
 SOURCE = "/dev/video2"
 
+
 class ArUcoDecoder:
     """ArUco markers decoder class"""
 
@@ -51,7 +52,7 @@ class ArUcoDecoder:
 
         self.cap = cv2.VideoCapture(SOURCE)
         if self.cap is None or not self.cap.isOpened():
-            print('Warning: unable to open video source: ', SOURCE)
+            print("Warning: unable to open video source: ", SOURCE)
             sys.exit(0)
         self.set_cap_prop()
         time.sleep(2.0)
@@ -118,7 +119,7 @@ class ArUcoDecoder:
                     2,
                 )
 
-    def resize(self, source, scale_percent = 70):
+    def resize(self, source, scale_percent=70):
         width = int(source.shape[1] * scale_percent / 100)
         height = int(source.shape[0] * scale_percent / 100)
         dim = (width, height)
@@ -194,28 +195,9 @@ class ArUcoDecoder:
         print("wanted points: \n", dstPoints)
         print("source points: \n", srcPoints)
         self.P = cv2.getPerspectiveTransform(srcPoints, dstPoints)
-        
-        irlPoints = np.array(
-            [
-                [0,0],
-                [MAP_W_IRL ,0],
-                [MAP_W_IRL, MAP_H_IRL],
-                [0, MAP_H_IRL],
-            ],
-            dtype="float32",
-        )
-
-        self.H = cv2.getPerspectiveTransform(srcPoints, irlPoints)
-
-        pt = np.array([[top_left[0], top_left[1], 1]])
-        print("Perspective matrix:\n", self.P)
-        print("Homography matrix:\n", self.H)
-        print("point:\n", pt)
-        print("Wrap:\n", np.matmul(self.P, np.transpose(pt)))
-        print("Wrap IRL:\n", np.matmul(self.H, np.transpose(pt)))
 
         img_warp = cv2.warpPerspective(self.img, self.P, (self.max_w, self.max_h))
-        
+
         cv2.imshow("warp", self.resize(source=img_warp, scale_percent=40))
         cv2.waitKey(0)
         cv2.destroyAllWindows()
@@ -233,7 +215,7 @@ class ArUcoDecoder:
         if ids is not None and 5 in ids:
             robot = np.asarray(self.ref_centers["5"])
             robot = np.append(robot, 1)
-            
+
             robot = np.matmul(self.P, np.transpose(robot))
             robot /= robot[2]
             robot[1] *= MAP_H_IRL / self.max_h
@@ -276,6 +258,7 @@ def main():
     decoder.calibration()
     time.sleep(1)
     decoder.tracking()
+
 
 if __name__ == "__main__":
     main()
