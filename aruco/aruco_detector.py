@@ -2,11 +2,14 @@
 Adapted from https://pyimagesearch.com/
 """
 
+from datetime import datetime
+from ssl import ALERT_DESCRIPTION_UNEXPECTED_MESSAGE
 import cv2
 import numpy as np
 import sys
 import time
 from random import randint
+import argparse
 
 # Maze H and W (to modify depending on the physical setup)
 MAP_H_IRL = 72.0  # 23.0
@@ -46,7 +49,7 @@ SOURCE = "/dev/video2"
 class ArUcoDecoder:
     """ArUco markers decoder class"""
 
-    def __init__(self):
+    def __init__(self, traj):
         self.arucoDict = cv2.aruco.Dictionary_get(ARUCO_DICT["DICT_5X5_100"])
         self.arucoParams = cv2.aruco.DetectorParameters_create()
 
@@ -58,6 +61,8 @@ class ArUcoDecoder:
         time.sleep(2.0)
 
         self.img = None
+        self.traj = traj  
+        self.traj_img = None      
         self.P = None
         self.ref_centers = {}
 
@@ -76,7 +81,9 @@ class ArUcoDecoder:
         :param ids: list of detected markers' IDs
         :type ids: list
         """
+        bot_center = None
         self.img = cv2.cvtColor(self.img, cv2.COLOR_GRAY2RGB)
+
         # verify *at least* one ArUco marker was detected
         if len(corners) > 0:
             # flatten the ArUco IDs list
@@ -107,7 +114,9 @@ class ArUcoDecoder:
                 center = (cX, cY)
                 self.ref_centers[str(markerID)] = center
                 cv2.circle(self.img, center, 2, (0, 0, 255), -1)
-
+                
+                if self.traj and markerID == 5:
+                    bot_center = center
                 # draw the ArUco marker ID on the image
                 cv2.putText(
                     self.img,
@@ -118,6 +127,8 @@ class ArUcoDecoder:
                     (0, 255, 0),
                     2,
                 )
+
+        return bot_center
 
     def resize(self, source, scale_percent=70):
         width = int(source.shape[1] * scale_percent / 100)
@@ -136,7 +147,7 @@ class ArUcoDecoder:
             (corners, ids, _) = cv2.aruco.detectMarkers(
                 self.img, self.arucoDict, parameters=self.arucoParams
             )
-            self.draw_corners(corners, ids)
+            _ = self.draw_corners(corners, ids)
             cv2.imshow("Calibration", self.resize(source=self.img))
             if cv2.waitKey(1) == ord("q"):
                 cv2.waitKey(1)
@@ -192,8 +203,7 @@ class ArUcoDecoder:
             ],
             dtype="float32",
         )
-        print("wanted points: \n", dstPoints)
-        print("source points: \n", srcPoints)
+      
         self.P = cv2.getPerspectiveTransform(srcPoints, dstPoints)
 
         img_warp = cv2.warpPerspective(self.img, self.P, (self.max_w, self.max_h))
@@ -207,7 +217,21 @@ class ArUcoDecoder:
         (corners, ids, _) = cv2.aruco.detectMarkers(
             self.img, self.arucoDict, parameters=self.arucoParams
         )
-        self.draw_corners(corners, ids)
+        bot_pos = self.draw_corners(corners, ids)
+        
+        
+        if self.traj:
+            # create trajectory image  
+            if self.traj_img is None:
+                shape = np.shape(self.img)
+                self.traj_img = np.zeros(shape, np.uint8)
+            # update trajectory image
+            cv2.circle(self.traj_img, bot_pos, 1, (0, 0, 255), -1)
+            # blend images 
+            alpha = 0.6
+            beta = 1 - 0.6
+            self.img = cv2.addWeighted(self.img, alpha, self.traj_img, beta, 0.0)
+
         cv2.imshow("Frame", self.resize(source=self.img))
         self.img = cv2.warpPerspective(self.img, self.P, (self.max_w, self.max_h))
         self.img = cv2.copyMakeBorder(self.img, 100, 100, 100, 100, cv2.BORDER_CONSTANT)
@@ -231,9 +255,11 @@ class ArUcoDecoder:
                 2,
             )
 
-        cv2.imshow("warp", self.resize(source=self.img, scale_percent=50))
+        cv2.imshow("warp", self.resize(source=self.img, scale_percent=30))
 
         if cv2.waitKey(1) == ord("q"):
+            if self.traj:
+                cv2.imwrite(f'trajectory_' + datetime.now().strftime("%Y%m%d-%H%M%S") + '.png', self.img)
             cv2.destroyAllWindows()
             sys.exit()
 
@@ -253,12 +279,19 @@ class ArUcoDecoder:
                 sys.exit()
 
 
-def main():
-    decoder = ArUcoDecoder()
+def main(traj):
+    decoder = ArUcoDecoder(traj)
     decoder.calibration()
     time.sleep(1)
     decoder.tracking()
 
+def parser():
+    parser = argparse.ArgumentParser(description='Process some integers.')
+    parser.add_argument('-t', '--traj', action='store_true', default=False,
+                    help='trajectory drawing boolean')
+    args = parser.parse_args()
+    return args
 
 if __name__ == "__main__":
-    main()
+    args = parser()
+    main(args.traj)
