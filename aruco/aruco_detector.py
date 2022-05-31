@@ -110,7 +110,6 @@ class ArUcoDecoder:
         :param ids: list of detected markers' IDs
         :type ids: list
         """
-        bot_center = None
         self.img = cv2.cvtColor(self.img, cv2.COLOR_GRAY2RGB)
 
         # verify *at least* one ArUco marker was detected
@@ -144,8 +143,6 @@ class ArUcoDecoder:
                 self.ref_centers[str(markerID)] = center
                 cv2.circle(self.img, center, 2, (0, 0, 255), -1)
 
-                if self.traj and markerID == 5:
-                    bot_center = center
                 # draw the ArUco marker ID on the image
                 cv2.putText(
                     self.img,
@@ -156,8 +153,6 @@ class ArUcoDecoder:
                     (0, 255, 0),
                     2,
                 )
-
-        return bot_center
 
     def resize(self, source, scale_percent=70):
         width = int(source.shape[1] * scale_percent / 100)
@@ -177,7 +172,7 @@ class ArUcoDecoder:
             (corners, ids, _) = cv2.aruco.detectMarkers(
                 self.img, self.arucoDict, parameters=self.arucoParams
             )
-            _ = self.draw_corners(corners, ids)
+            self.draw_corners(corners, ids)
 
             cv2.imshow("Calibration", self.resize(source=self.img))
             if cv2.waitKey(1) == ord("q"):
@@ -272,6 +267,8 @@ class ArUcoDecoder:
             corners += win_origin
         corners = tuple(corners)
            
+        self.draw_corners(corners, ids)
+
         # update robot position for local search
         self.robot_pos_raw = self.ref_centers["5"]
 
