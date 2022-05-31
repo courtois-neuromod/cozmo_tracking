@@ -262,7 +262,7 @@ class ArUcoDecoder:
             srch_area, self.arucoDict, parameters=self.arucoParams
         )
         
-        corners = np.asarray(corners)  # TODO: account for multiple detections
+        corners = np.asarray(corners)  
         if corners.size != 0:
             corners += win_origin
         corners = tuple(corners)
