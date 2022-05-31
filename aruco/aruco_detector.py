@@ -2,6 +2,7 @@
 Adapted from https://pyimagesearch.com/
 """
 
+import json
 from datetime import datetime
 from ssl import ALERT_DESCRIPTION_UNEXPECTED_MESSAGE
 import cv2
@@ -78,7 +79,9 @@ class ArUcoDecoder:
         self.ref_centers = {}
         self.robot_pos_raw = None
 
-        """ 
+        self.robot_position = None
+        self.new_position = False
+
         self.sock_send = socket.socket(ADDR_FAMILY, SOCKET_TYPE)
         self.sock_send.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock_send.bind(("", self.tcp_port_send))
@@ -86,15 +89,39 @@ class ArUcoDecoder:
         self.sock_send.settimeout(1.5)
 
         self.thread_send = threading.Thread(target=self.send_loop)
-        self.thread_send.start()
         self.lock_send = threading.Lock() 
-        """
 
-    """ def send_loop(self):
-        # connect to the task listener
-        # fetch last position (and timestamp)
-        # send last position (and timestamp) """
+        self.done = False
+       
+    def send_connect(self):
+        while not self.done:
+            try:
+                conn, _ = self.sock_send.accept()
+                break
+            except socket.timeout:
+                continue
+        if self.done:
+            return None
+        return conn
 
+    def send_loop(self):
+        conn = self.send_connect()
+        while not self.done and conn:
+
+            self.lock_send.acquire()
+            new_position = self.new_position
+            self.new_position = False
+            last_pos = self.robot_position
+            self.lock_send.release()
+
+            if new_position:
+                data = json.dumps(last_pos).encode()
+                try:
+                    conn.sendall(data)
+                except ConnectionError:
+                    conn.close()
+                    conn = self.send_connect()
+    
     def set_cap_prop(self):
         """Camera setting function"""
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAM_W)
@@ -140,7 +167,11 @@ class ArUcoDecoder:
                 cX = int((topLeft[0] + bottomRight[0]) / 2.0)
                 cY = int((topLeft[1] + bottomRight[1]) / 2.0)
                 center = (cX, cY)
-                self.ref_centers[str(markerID)] = center
+                if markerID == 5:
+                    self.ref_centers[str(markerID)] = center
+                else:
+                    self.ref_centers[str(markerID)] = center
+
                 cv2.circle(self.img, center, 2, (0, 0, 255), -1)
 
                 # draw the ArUco marker ID on the image
@@ -299,6 +330,11 @@ class ArUcoDecoder:
             robot[1] *= MAP_H_IRL / self.max_h
             robot[0] *= MAP_W_IRL / self.max_w
 
+            self.lock_send.acquire()
+            self.new_position = True
+            self.robot_position = (robot[0], robot[1])
+            self.lock_send.release()
+
             cv2.putText(
                 self.img,
                 "Robot's position: ({:.2f}, {:.2f})".format(robot[0], robot[1]),
@@ -332,7 +368,8 @@ class ArUcoDecoder:
             if cv2.waitKey(1) == ord("q"):
                 cv2.waitKey(1)
                 cv2.destroyAllWindows()
-
+                self.done = True
+                self.thread_send.join()
                 sys.exit()
 
 
@@ -340,6 +377,7 @@ def main(traj):
     decoder = ArUcoDecoder(traj)
     decoder.calibration()
     decoder.calib = True
+    decoder.thread_send.start()
     time.sleep(1)
     decoder.tracking()
 
