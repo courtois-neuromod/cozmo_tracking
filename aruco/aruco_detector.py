@@ -10,14 +10,25 @@ import sys
 import time
 from random import randint
 import argparse
+import socket
+import threading
 
 # Maze H and W (to modify depending on the physical setup)
 MAP_H_IRL = 72.0  # 23.0
 MAP_W_IRL = 110.4  # 15.2
 
+# Local search area dimension
+SEARCH_H = 75
+SEARCH_W = 75
+
 # Camera resolution
-CAM_W = 11920
-CAM_H = 11080
+CAM_W = 1920
+CAM_H = 1080
+
+# Communication specs
+SENDING_PORT = 1030
+ADDR_FAMILY = socket.AF_INET
+SOCKET_TYPE = socket.SOCK_STREAM
 
 ARUCO_DICT = {
     "DICT_4X4_50": cv2.aruco.DICT_4X4_50,
@@ -61,10 +72,28 @@ class ArUcoDecoder:
         time.sleep(2.0)
 
         self.img = None
-        self.traj = traj  
-        self.traj_img = None      
+        self.traj = traj
+        self.traj_img = None
         self.P = None
         self.ref_centers = {}
+        self.robot_pos_raw = None
+
+        """ 
+        self.sock_send = socket.socket(ADDR_FAMILY, SOCKET_TYPE)
+        self.sock_send.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.sock_send.bind(("", self.tcp_port_send))
+        self.sock_send.listen(10)
+        self.sock_send.settimeout(1.5)
+
+        self.thread_send = threading.Thread(target=self.send_loop)
+        self.thread_send.start()
+        self.lock_send = threading.Lock() 
+        """
+
+    """ def send_loop(self):
+        # connect to the task listener
+        # fetch last position (and timestamp)
+        # send last position (and timestamp) """
 
     def set_cap_prop(self):
         """Camera setting function"""
@@ -114,7 +143,7 @@ class ArUcoDecoder:
                 center = (cX, cY)
                 self.ref_centers[str(markerID)] = center
                 cv2.circle(self.img, center, 2, (0, 0, 255), -1)
-                
+
                 if self.traj and markerID == 5:
                     bot_center = center
                 # draw the ArUco marker ID on the image
@@ -140,6 +169,7 @@ class ArUcoDecoder:
     def calibration(self):
         """Initialization function, detecting the 4 ArUco markers located in the corners, and deriving the homography matrix between the camera's and the floor's planes."""
 
+        # detect the four corner markers
         ids = []
         while ids is None or not all(x in ids for x in [1, 2, 3, 4]):
             _, self.img = self.cap.read()
@@ -148,6 +178,7 @@ class ArUcoDecoder:
                 self.img, self.arucoDict, parameters=self.arucoParams
             )
             _ = self.draw_corners(corners, ids)
+
             cv2.imshow("Calibration", self.resize(source=self.img))
             if cv2.waitKey(1) == ord("q"):
                 cv2.waitKey(1)
@@ -159,6 +190,7 @@ class ArUcoDecoder:
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
+        # get perpective matrix
         top_left = self.ref_centers["1"]
         top_right = self.ref_centers["2"]
         bottom_left = self.ref_centers["3"]
@@ -203,38 +235,66 @@ class ArUcoDecoder:
             ],
             dtype="float32",
         )
-      
+
         self.P = cv2.getPerspectiveTransform(srcPoints, dstPoints)
 
+        # warp image
         img_warp = cv2.warpPerspective(self.img, self.P, (self.max_w, self.max_h))
 
         cv2.imshow("warp", self.resize(source=img_warp, scale_percent=40))
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
+        # if the robot has been detected, store its first position for local tracking
+        if "5" in self.ref_centers:
+            self.robot_pos_raw = self.ref_centers["5"]
+
     def decode(self):
         """Decoding function, detecting markers present in the received image, and computing the robot's position in the maze's reference frame."""
-        (corners, ids, _) = cv2.aruco.detectMarkers(
-            self.img, self.arucoDict, parameters=self.arucoParams
+        # local search
+        srch_area = self.img
+        win_origin = (0, 0)
+        if self.robot_pos_raw:
+
+            w_min = max(self.robot_pos_raw[0] - SEARCH_W, 0)
+            w_max = min(self.robot_pos_raw[0] + SEARCH_W, np.shape(self.img)[1])
+            h_min = max(self.robot_pos_raw[1] - SEARCH_H, 0)
+            h_max = min(self.robot_pos_raw[1] + SEARCH_H, np.shape(self.img)[0])
+            win_origin = (w_min, h_min)
+            srch_area = self.img[h_min:h_max, w_min:w_max]
+
+        # cv2.imshow("local search", srch_area)
+        #start = time.time()
+        corners, ids, _ = cv2.aruco.detectMarkers(
+            srch_area, self.arucoDict, parameters=self.arucoParams
         )
+        #end = time.time()
+        #print("duration: ", end - start)
+        corners = np.asarray(corners)  # TODO: account for multiple detections
+        if corners.size != 0:
+            corners += win_origin
+        corners = tuple(corners)
         bot_pos = self.draw_corners(corners, ids)
-        
-        
+           
+        # update robot position for local search
+        self.robot_pos_raw = bot_pos
+
+        # draw traj if needed
         if self.traj:
-            # create trajectory image  
+            # create trajectory image
             if self.traj_img is None:
                 shape = np.shape(self.img)
                 self.traj_img = np.zeros(shape, np.uint8)
             # update trajectory image
             cv2.circle(self.traj_img, bot_pos, 1, (0, 0, 255), -1)
-            # blend images 
+            # blend images
             alpha = 0.6
             beta = 1 - 0.6
             self.img = cv2.addWeighted(self.img, alpha, self.traj_img, beta, 0.0)
 
-        cv2.imshow("Frame", self.resize(source=self.img))
-        self.img = cv2.warpPerspective(self.img, self.P, (self.max_w, self.max_h))
-        self.img = cv2.copyMakeBorder(self.img, 100, 100, 100, 100, cv2.BORDER_CONSTANT)
+        # cv2.imshow("Frame", self.resize(source=self.img))
+        #self.img = cv2.warpPerspective(self.img, self.P, (self.max_w, self.max_h))
+        #self.img = cv2.copyMakeBorder(self.img, 100, 100, 100, 100, cv2.BORDER_CONSTANT)
 
         if ids is not None and 5 in ids:
             robot = np.asarray(self.ref_centers["5"])
@@ -256,10 +316,12 @@ class ArUcoDecoder:
             )
 
         cv2.imshow("warp", self.resize(source=self.img, scale_percent=30))
-
         if cv2.waitKey(1) == ord("q"):
             if self.traj:
-                cv2.imwrite(f'trajectory_' + datetime.now().strftime("%Y%m%d-%H%M%S") + '.png', self.img)
+                cv2.imwrite(
+                    f"trajectory_" + datetime.now().strftime("%Y%m%d-%H%M%S") + ".png",
+                    self.img,
+                )
             cv2.destroyAllWindows()
             sys.exit()
 
@@ -268,29 +330,41 @@ class ArUcoDecoder:
     def tracking(self):
         """Tracking function, reading a frame from the camera and decoding it."""
         while True:
+            start_loop = time.time()
             _, self.img = self.cap.read()
             self.img = cv2.cvtColor(self.img, cv2.COLOR_BGR2GRAY)
+            start = time.time()
             self.decode()
+            end = time.time()
 
             if cv2.waitKey(1) == ord("q"):
                 cv2.waitKey(1)
                 cv2.destroyAllWindows()
 
                 sys.exit()
+            end_loop = time.time()
 
 
 def main(traj):
     decoder = ArUcoDecoder(traj)
     decoder.calibration()
+    decoder.calib = True
     time.sleep(1)
     decoder.tracking()
 
+
 def parser():
-    parser = argparse.ArgumentParser(description='Process some integers.')
-    parser.add_argument('-t', '--traj', action='store_true', default=False,
-                    help='trajectory drawing boolean')
+    parser = argparse.ArgumentParser(description="ArUco detector and tracker.")
+    parser.add_argument(
+        "-t",
+        "--traj",
+        action="store_true",
+        default=False,
+        help="trajectory drawing boolean",
+    )
     args = parser.parse_args()
     return args
+
 
 if __name__ == "__main__":
     args = parser()
