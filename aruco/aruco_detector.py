@@ -4,65 +4,22 @@ Adapted from https://pyimagesearch.com/
 
 import json
 from datetime import datetime
-from ssl import ALERT_DESCRIPTION_UNEXPECTED_MESSAGE
 import cv2
 import numpy as np
 import sys
 import time
-from random import randint
 import argparse
 import socket
 import threading
 
-# Maze H and W (to modify depending on the physical setup)
-MAP_H_IRL = 72.0  # 23.0
-MAP_W_IRL = 110.4  # 15.2
-
-# Local search area dimension
-SEARCH_H = 75
-SEARCH_W = 75
-
-# Camera resolution
-CAM_W = 1920
-CAM_H = 1080
-
-# Communication specs
-SENDING_PORT = 1030
-ADDR_FAMILY = socket.AF_INET
-SOCKET_TYPE = socket.SOCK_STREAM
-
-ARUCO_DICT = {
-    "DICT_4X4_50": cv2.aruco.DICT_4X4_50,
-    "DICT_4X4_100": cv2.aruco.DICT_4X4_100,
-    "DICT_4X4_250": cv2.aruco.DICT_4X4_250,
-    "DICT_4X4_1000": cv2.aruco.DICT_4X4_1000,
-    "DICT_5X5_50": cv2.aruco.DICT_5X5_50,
-    "DICT_5X5_100": cv2.aruco.DICT_5X5_100,
-    "DICT_5X5_250": cv2.aruco.DICT_5X5_250,
-    "DICT_5X5_1000": cv2.aruco.DICT_5X5_1000,
-    "DICT_6X6_50": cv2.aruco.DICT_6X6_50,
-    "DICT_6X6_100": cv2.aruco.DICT_6X6_100,
-    "DICT_6X6_250": cv2.aruco.DICT_6X6_250,
-    "DICT_6X6_1000": cv2.aruco.DICT_6X6_1000,
-    "DICT_7X7_50": cv2.aruco.DICT_7X7_50,
-    "DICT_7X7_100": cv2.aruco.DICT_7X7_100,
-    "DICT_7X7_250": cv2.aruco.DICT_7X7_250,
-    "DICT_7X7_1000": cv2.aruco.DICT_7X7_1000,
-    "DICT_ARUCO_ORIGINAL": cv2.aruco.DICT_ARUCO_ORIGINAL,
-    "DICT_APRILTAG_16h5": cv2.aruco.DICT_APRILTAG_16h5,
-    "DICT_APRILTAG_25h9": cv2.aruco.DICT_APRILTAG_25h9,
-    "DICT_APRILTAG_36h10": cv2.aruco.DICT_APRILTAG_36h10,
-    "DICT_APRILTAG_36h11": cv2.aruco.DICT_APRILTAG_36h11,
-}
-
-SOURCE = "/dev/video2"
+from config import MAP_H_IRL, MAP_W_IRL, SEARCH_H, SEARCH_W, CAM_W, CAM_H, SENDING_PORT, ADDR_FAMILY, SOCKET_TYPE, SOURCE
 
 
 class ArUcoDecoder:
     """ArUco markers decoder class"""
 
     def __init__(self, traj):
-        self.arucoDict = cv2.aruco.Dictionary_get(ARUCO_DICT["DICT_5X5_100"])
+        self.arucoDict = cv2.aruco.Dictionary_get(cv2.aruco.DICT_5X5_100)
         self.arucoParams = cv2.aruco.DetectorParameters_create()
 
         self.cap = cv2.VideoCapture(SOURCE)
@@ -204,8 +161,7 @@ class ArUcoDecoder:
                 self.img, self.arucoDict, parameters=self.arucoParams
             )
             self.draw_corners(corners, ids)
-
-            cv2.imshow("Calibration", self.resize(source=self.img))
+            cv2.imshow("Calibration", self.resize(source=self.img, scale_percent=100))
             if cv2.waitKey(1) == ord("q"):
                 cv2.waitKey(1)
                 cv2.destroyAllWindows()
@@ -300,7 +256,7 @@ class ArUcoDecoder:
            
         self.draw_corners(corners, ids)
 
-        # update robot position for local search
+        """ # update robot position for local search
         self.robot_pos_raw = self.ref_centers["5"]
 
         # draw traj if needed
@@ -315,13 +271,30 @@ class ArUcoDecoder:
             # blend images
             alpha = 0.6
             beta = 1 - 0.6
-            self.img = cv2.addWeighted(self.img, alpha, self.traj_img, beta, 0.0)
+            self.img = cv2.addWeighted(self.img, alpha, self.traj_img, beta, 0.0) """
 
         #cv2.imshow("Frame", self.resize(source=self.img))
         #self.img = cv2.warpPerspective(self.img, self.P, (self.max_w, self.max_h))
         #self.img = cv2.copyMakeBorder(self.img, 100, 100, 100, 100, cv2.BORDER_CONSTANT)
 
         if ids is not None and 5 in ids:
+            # update robot position for local search
+            self.robot_pos_raw = self.ref_centers["5"]
+
+            # draw traj if needed
+            if self.traj:
+                # create trajectory image
+                if self.traj_img is None:
+                    shape = np.shape(self.img)
+                    self.traj_img = np.zeros(shape, np.uint8)
+                # update trajectory image
+                cv2.circle(self.traj_img, self.ref_centers["5"], 1, (0, 0, 255), -1)
+                
+                # blend images
+                alpha = 0.6
+                beta = 1 - 0.6
+                self.img = cv2.addWeighted(self.img, alpha, self.traj_img, beta, 0.0)
+
             robot = np.asarray(self.ref_centers["5"])
             robot = np.append(robot, 1)
 
@@ -391,6 +364,7 @@ def parser():
         default=False,
         help="trajectory drawing boolean",
     )
+    parser.add_argument("-c", "--config", type=str, default="config.py«")
     args = parser.parse_args()
     return args
 
