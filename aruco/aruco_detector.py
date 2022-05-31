@@ -84,7 +84,7 @@ class ArUcoDecoder:
 
         self.sock_send = socket.socket(ADDR_FAMILY, SOCKET_TYPE)
         self.sock_send.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.sock_send.bind(("", self.tcp_port_send))
+        self.sock_send.bind(("", SENDING_PORT))
         self.sock_send.listen(10)
         self.sock_send.settimeout(1.5)
 
