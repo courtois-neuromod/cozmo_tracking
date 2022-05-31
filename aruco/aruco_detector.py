@@ -271,11 +271,9 @@ class ArUcoDecoder:
         if corners.size != 0:
             corners += win_origin
         corners = tuple(corners)
-        bot_pos = self.draw_corners(corners, ids)
            
         # update robot position for local search
-        #self.robot_pos_raw = bot_pos
-        self.ref_centers["5"]
+        self.robot_pos_raw = self.ref_centers["5"]
 
         # draw traj if needed
         if self.traj:
@@ -284,7 +282,6 @@ class ArUcoDecoder:
                 shape = np.shape(self.img)
                 self.traj_img = np.zeros(shape, np.uint8)
             # update trajectory image
-            #cv2.circle(self.traj_img, bot_pos, 1, (0, 0, 255), -1)
             cv2.circle(self.traj_img, self.ref_centers["5"], 1, (0, 0, 255), -1)
             
             # blend images
@@ -331,19 +328,15 @@ class ArUcoDecoder:
     def tracking(self):
         """Tracking function, reading a frame from the camera and decoding it."""
         while True:
-            start_loop = time.time()
             _, self.img = self.cap.read()
             self.img = cv2.cvtColor(self.img, cv2.COLOR_BGR2GRAY)
-            start = time.time()
             self.decode()
-            end = time.time()
 
             if cv2.waitKey(1) == ord("q"):
                 cv2.waitKey(1)
                 cv2.destroyAllWindows()
 
                 sys.exit()
-            end_loop = time.time()
 
 
 def main(traj):
