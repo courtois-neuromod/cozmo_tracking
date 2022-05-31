@@ -263,13 +263,10 @@ class ArUcoDecoder:
             win_origin = (w_min, h_min)
             srch_area = self.img[h_min:h_max, w_min:w_max]
 
-        # cv2.imshow("local search", srch_area)
-        #start = time.time()
         corners, ids, _ = cv2.aruco.detectMarkers(
             srch_area, self.arucoDict, parameters=self.arucoParams
         )
-        #end = time.time()
-        #print("duration: ", end - start)
+        
         corners = np.asarray(corners)  # TODO: account for multiple detections
         if corners.size != 0:
             corners += win_origin
@@ -277,7 +274,8 @@ class ArUcoDecoder:
         bot_pos = self.draw_corners(corners, ids)
            
         # update robot position for local search
-        self.robot_pos_raw = bot_pos
+        #self.robot_pos_raw = bot_pos
+        self.ref_centers["5"]
 
         # draw traj if needed
         if self.traj:
@@ -286,13 +284,15 @@ class ArUcoDecoder:
                 shape = np.shape(self.img)
                 self.traj_img = np.zeros(shape, np.uint8)
             # update trajectory image
-            cv2.circle(self.traj_img, bot_pos, 1, (0, 0, 255), -1)
+            #cv2.circle(self.traj_img, bot_pos, 1, (0, 0, 255), -1)
+            cv2.circle(self.traj_img, self.ref_centers["5"], 1, (0, 0, 255), -1)
+            
             # blend images
             alpha = 0.6
             beta = 1 - 0.6
             self.img = cv2.addWeighted(self.img, alpha, self.traj_img, beta, 0.0)
 
-        # cv2.imshow("Frame", self.resize(source=self.img))
+        #cv2.imshow("Frame", self.resize(source=self.img))
         #self.img = cv2.warpPerspective(self.img, self.P, (self.max_w, self.max_h))
         #self.img = cv2.copyMakeBorder(self.img, 100, 100, 100, 100, cv2.BORDER_CONSTANT)
 
@@ -314,8 +314,9 @@ class ArUcoDecoder:
                 (0, 0, 255),
                 2,
             )
-
-        cv2.imshow("warp", self.resize(source=self.img, scale_percent=30))
+        
+        cv2.imshow("Frame", self.resize(source=self.img))
+        #cv2.imshow("warp", self.resize(source=self.img, scale_percent=30))
         if cv2.waitKey(1) == ord("q"):
             if self.traj:
                 cv2.imwrite(
