@@ -52,6 +52,7 @@ class ArUcoDecoder:
        
     def send_connect(self):
         while not self.done:
+            print(self.done)
             try:
                 conn, _ = self.sock_send.accept()
                 break
@@ -63,8 +64,11 @@ class ArUcoDecoder:
 
     def send_loop(self):
         conn = self.send_connect()
+        start = 0.0
+        end = 1 / 15
         while not self.done and conn:
-
+            time.sleep(max(0, 1 / 15 - ( end - start )))    # TODO: not robust way of not sending two json objects before first read on task side
+            start = time.time()
             self.lock_send.acquire()
             new_position = self.new_position
             self.new_position = False
@@ -78,6 +82,7 @@ class ArUcoDecoder:
                 except ConnectionError:
                     conn.close()
                     conn = self.send_connect()
+            end = time.time()
     
     def set_cap_prop(self):
         """Camera setting function"""
@@ -320,14 +325,6 @@ class ArUcoDecoder:
         
         cv2.imshow("Frame", self.resize(source=self.img))
         #cv2.imshow("warp", self.resize(source=self.img, scale_percent=30))
-        if cv2.waitKey(1) == ord("q"):
-            if self.traj:
-                cv2.imwrite(
-                    f"trajectory_" + datetime.now().strftime("%Y%m%d-%H%M%S") + ".png",
-                    self.img,
-                )
-            cv2.destroyAllWindows()
-            sys.exit()
 
         return
 
@@ -339,10 +336,17 @@ class ArUcoDecoder:
             self.decode()
 
             if cv2.waitKey(1) == ord("q"):
+                print("Exiting...")
                 cv2.waitKey(1)
                 cv2.destroyAllWindows()
+                if self.traj:
+                    cv2.imwrite(
+                        f"trajectory_" + datetime.now().strftime("%Y%m%d-%H%M%S") + ".png",
+                        self.img,
+                    )
                 self.done = True
                 self.thread_send.join()
+                print("Done.")
                 sys.exit()
 
 
