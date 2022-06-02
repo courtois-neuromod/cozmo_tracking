@@ -2,7 +2,6 @@
 Adapted from https://pyimagesearch.com/
 """
 
-import json
 from datetime import datetime
 import cv2
 import numpy as np
@@ -11,6 +10,7 @@ import time
 import argparse
 import socket
 import threading
+import struct
 
 from config import MAP_H_IRL, MAP_W_IRL, SEARCH_H, SEARCH_W, CAM_W, CAM_H, SENDING_PORT, ADDR_FAMILY, SOCKET_TYPE, SOURCE
 
@@ -52,7 +52,7 @@ class ArUcoDecoder:
        
     def send_connect(self):
         while not self.done:
-            print(self.done)
+            print("Connection status: ", self.done)
             try:
                 conn, _ = self.sock_send.accept()
                 break
@@ -67,7 +67,7 @@ class ArUcoDecoder:
         start = 0.0
         end = 1 / 15
         while not self.done and conn:
-            time.sleep(max(0, 1 / 15 - ( end - start )))    # TODO: not robust way of not sending two json objects before first read on task side
+            time.sleep(max(0, 1 / 15 - ( end - start )))    
             start = time.time()
             self.lock_send.acquire()
             new_position = self.new_position
@@ -76,7 +76,10 @@ class ArUcoDecoder:
             self.lock_send.release()
 
             if new_position:
-                data = json.dumps(last_pos).encode()
+                x_pos, y_pos = last_pos
+                x_pos = bytearray(struct.pack('d', x_pos))
+                y_pos = bytearray(struct.pack('d', y_pos))
+                data = x_pos + y_pos
                 try:
                     conn.sendall(data)
                 except ConnectionError:
@@ -282,6 +285,7 @@ class ArUcoDecoder:
         #self.img = cv2.warpPerspective(self.img, self.P, (self.max_w, self.max_h))
         #self.img = cv2.copyMakeBorder(self.img, 100, 100, 100, 100, cv2.BORDER_CONSTANT)
 
+        self.robot_pos_raw = None   # if robot not detected
         if ids is not None and 5 in ids:
             # update robot position for local search
             self.robot_pos_raw = self.ref_centers["5"]
