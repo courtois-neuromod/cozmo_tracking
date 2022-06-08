@@ -30,6 +30,7 @@ class ArUcoDecoder:
         time.sleep(2.0)
 
         self.img = None
+        self.img_to_send = None
         self.traj = traj
         self.traj_img = None
         self.P = None
@@ -73,6 +74,7 @@ class ArUcoDecoder:
             new_position = self.new_position
             self.new_position = False
             last_pos = self.robot_position
+            img = self.img_to_send
             self.lock_send.release()
 
             if new_position:
@@ -80,6 +82,15 @@ class ArUcoDecoder:
                 x_pos = bytearray(struct.pack('d', x_pos))
                 y_pos = bytearray(struct.pack('d', y_pos))
                 data = x_pos + y_pos
+                
+                img = cv2.resize(img, (int(np.shape(img)[1] / 4), int(np.shape(img)[0] / 4)))
+                _, encoded_image = cv2.imencode('.jpg', img)
+                img = bytearray(encoded_image)
+                
+                data = data + img
+                
+                size = bytearray(len(data).to_bytes(length=3, byteorder='big'))
+                data = size + data
                 try:
                     conn.sendall(data)
                 except ConnectionError:
@@ -264,27 +275,6 @@ class ArUcoDecoder:
            
         self.draw_corners(corners, ids)
 
-        """ # update robot position for local search
-        self.robot_pos_raw = self.ref_centers["5"]
-
-        # draw traj if needed
-        if self.traj:
-            # create trajectory image
-            if self.traj_img is None:
-                shape = np.shape(self.img)
-                self.traj_img = np.zeros(shape, np.uint8)
-            # update trajectory image
-            cv2.circle(self.traj_img, self.ref_centers["5"], 1, (0, 0, 255), -1)
-            
-            # blend images
-            alpha = 0.6
-            beta = 1 - 0.6
-            self.img = cv2.addWeighted(self.img, alpha, self.traj_img, beta, 0.0) """
-
-        #cv2.imshow("Frame", self.resize(source=self.img))
-        #self.img = cv2.warpPerspective(self.img, self.P, (self.max_w, self.max_h))
-        #self.img = cv2.copyMakeBorder(self.img, 100, 100, 100, 100, cv2.BORDER_CONSTANT)
-
         self.robot_pos_raw = None   # if robot not detected
         if ids is not None and 5 in ids:
             # update robot position for local search
@@ -312,11 +302,6 @@ class ArUcoDecoder:
             robot[1] *= MAP_H_IRL / self.max_h
             robot[0] *= MAP_W_IRL / self.max_w
 
-            self.lock_send.acquire()
-            self.new_position = True
-            self.robot_position = (robot[0], robot[1])
-            self.lock_send.release()
-
             cv2.putText(
                 self.img,
                 "Robot's position: ({:.2f}, {:.2f})".format(robot[0], robot[1]),
@@ -326,6 +311,12 @@ class ArUcoDecoder:
                 (0, 0, 255),
                 2,
             )
+
+            self.lock_send.acquire()
+            self.new_position = True
+            self.robot_position = (robot[0], robot[1])
+            self.img_to_send = self.img
+            self.lock_send.release()
         
         cv2.imshow("Frame", self.resize(source=self.img))
         #cv2.imshow("warp", self.resize(source=self.img, scale_percent=30))
