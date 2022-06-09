@@ -12,7 +12,21 @@ import socket
 import threading
 import struct
 
-from config import MAP_H_IRL, MAP_W_IRL, SEARCH_H, SEARCH_W, CAM_W, CAM_H, SENDING_PORT, ADDR_FAMILY, SOCKET_TYPE, SOURCE
+import subprocess
+
+
+from config import (
+    MAP_H_IRL,
+    MAP_W_IRL,
+    SEARCH_H,
+    SEARCH_W,
+    CAM_W,
+    CAM_H,
+    SENDING_PORT,
+    ADDR_FAMILY,
+    SOCKET_TYPE,
+    SOURCE,
+)
 
 
 class ArUcoDecoder:
@@ -46,10 +60,10 @@ class ArUcoDecoder:
         self.sock_send.settimeout(1.5)
 
         self.thread_send = threading.Thread(target=self.send_loop)
-        self.lock_send = threading.Lock() 
+        self.lock_send = threading.Lock()
 
         self.done = False
-       
+
     def send_connect(self):
         while not self.done:
             print("Connection status: ", self.done)
@@ -67,7 +81,7 @@ class ArUcoDecoder:
         start = 0.0
         end = 1 / 15
         while not self.done and conn:
-            time.sleep(max(0, 1 / 15 - ( end - start )))    
+            time.sleep(max(0, 1 / 15 - (end - start)))
             start = time.time()
             self.lock_send.acquire()
             new_position = self.new_position
@@ -77,22 +91,32 @@ class ArUcoDecoder:
 
             if new_position:
                 x_pos, y_pos = last_pos
-                x_pos = bytearray(struct.pack('d', x_pos))
-                y_pos = bytearray(struct.pack('d', y_pos))
-                data = x_pos + y_pos
+                if last_pos == (None, None):
+                    data = bytearray()
+                else:
+                    x_pos = bytearray(struct.pack("d", x_pos))
+                    y_pos = bytearray(struct.pack("d", y_pos))
+                    data = x_pos + y_pos
+
+                size = bytearray(len(data).to_bytes(length=3, byteorder="big"))
+                data = size + data
                 try:
                     conn.sendall(data)
                 except ConnectionError:
                     conn.close()
                     conn = self.send_connect()
             end = time.time()
-    
+
     def set_cap_prop(self):
         """Camera setting function"""
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAM_W)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAM_H)
         self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
         self.cap.set(cv2.CAP_PROP_FOCUS, 0)
+        command = "v4l2-ctl -d " + SOURCE + " -c exposure_absolute=40"
+        print(command)
+        subprocess.check_call("v4l2-ctl -d /dev/video0 -c exposure_auto=1",shell=True)
+        subprocess.check_call("v4l2-ctl -d /dev/video0 -c exposure_absolute=40",shell=True)
 
     def draw_corners(self, corners, ids):
         """Drawing function, adding corners and ids of detected markers onto the displayed feed.
@@ -256,36 +280,15 @@ class ArUcoDecoder:
         corners, ids, _ = cv2.aruco.detectMarkers(
             srch_area, self.arucoDict, parameters=self.arucoParams
         )
-        
-        corners = np.asarray(corners)  
+
+        corners = np.asarray(corners)
         if corners.size != 0:
             corners += win_origin
         corners = tuple(corners)
-           
+
         self.draw_corners(corners, ids)
 
-        """ # update robot position for local search
-        self.robot_pos_raw = self.ref_centers["5"]
-
-        # draw traj if needed
-        if self.traj:
-            # create trajectory image
-            if self.traj_img is None:
-                shape = np.shape(self.img)
-                self.traj_img = np.zeros(shape, np.uint8)
-            # update trajectory image
-            cv2.circle(self.traj_img, self.ref_centers["5"], 1, (0, 0, 255), -1)
-            
-            # blend images
-            alpha = 0.6
-            beta = 1 - 0.6
-            self.img = cv2.addWeighted(self.img, alpha, self.traj_img, beta, 0.0) """
-
-        #cv2.imshow("Frame", self.resize(source=self.img))
-        #self.img = cv2.warpPerspective(self.img, self.P, (self.max_w, self.max_h))
-        #self.img = cv2.copyMakeBorder(self.img, 100, 100, 100, 100, cv2.BORDER_CONSTANT)
-
-        self.robot_pos_raw = None   # if robot not detected
+        self.robot_pos_raw = None  # if robot not detected
         if ids is not None and 5 in ids:
             # update robot position for local search
             self.robot_pos_raw = self.ref_centers["5"]
@@ -298,7 +301,7 @@ class ArUcoDecoder:
                     self.traj_img = np.zeros(shape, np.uint8)
                 # update trajectory image
                 cv2.circle(self.traj_img, self.ref_centers["5"], 1, (0, 0, 255), -1)
-                
+
                 # blend images
                 alpha = 0.6
                 beta = 1 - 0.6
@@ -312,11 +315,6 @@ class ArUcoDecoder:
             robot[1] *= MAP_H_IRL / self.max_h
             robot[0] *= MAP_W_IRL / self.max_w
 
-            self.lock_send.acquire()
-            self.new_position = True
-            self.robot_position = (robot[0], robot[1])
-            self.lock_send.release()
-
             cv2.putText(
                 self.img,
                 "Robot's position: ({:.2f}, {:.2f})".format(robot[0], robot[1]),
@@ -326,9 +324,26 @@ class ArUcoDecoder:
                 (0, 0, 255),
                 2,
             )
-        
+
+        else:
+            robot = (None, None)
+            cv2.putText(
+                self.img,
+                "Robot's position: ({}, {})".format(robot[0], robot[1]),
+                (30, 60),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                2,
+                (0, 0, 255),
+                2,
+            )
+
+        self.lock_send.acquire()
+        self.new_position = True
+        self.robot_position = (robot[0], robot[1])
+        self.lock_send.release()
+
+
         cv2.imshow("Frame", self.resize(source=self.img))
-        #cv2.imshow("warp", self.resize(source=self.img, scale_percent=30))
 
         return
 
@@ -345,7 +360,9 @@ class ArUcoDecoder:
                 cv2.destroyAllWindows()
                 if self.traj:
                     cv2.imwrite(
-                        f"trajectory_" + datetime.now().strftime("%Y%m%d-%H%M%S") + ".png",
+                        f"trajectory_"
+                        + datetime.now().strftime("%Y%m%d-%H%M%S")
+                        + ".png",
                         self.img,
                     )
                 self.done = True

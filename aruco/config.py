@@ -9,8 +9,10 @@ SEARCH_H = 100
 SEARCH_W = 100
 
 # Camera resolution
-CAM_W = 1920 
-CAM_H = 1080 
+MAX_CAM_H = 1920
+MAX_CAM_W = 1080 
+CAM_W = MAX_CAM_H / 1.5
+CAM_H = MAX_CAM_W / 1.5
 
 # Communication specs
 SENDING_PORT = 1030
