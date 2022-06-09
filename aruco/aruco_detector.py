@@ -12,7 +12,18 @@ import socket
 import threading
 import struct
 
-from config import MAP_H_IRL, MAP_W_IRL, SEARCH_H, SEARCH_W, CAM_W, CAM_H, SENDING_PORT, ADDR_FAMILY, SOCKET_TYPE, SOURCE
+from config import (
+    MAP_H_IRL,
+    MAP_W_IRL,
+    SEARCH_H,
+    SEARCH_W,
+    CAM_W,
+    CAM_H,
+    SENDING_PORT,
+    ADDR_FAMILY,
+    SOCKET_TYPE,
+    SOURCE,
+)
 
 
 class ArUcoDecoder:
@@ -30,7 +41,6 @@ class ArUcoDecoder:
         time.sleep(2.0)
 
         self.img = None
-        self.img_to_send = None
         self.traj = traj
         self.traj_img = None
         self.P = None
@@ -47,10 +57,10 @@ class ArUcoDecoder:
         self.sock_send.settimeout(1.5)
 
         self.thread_send = threading.Thread(target=self.send_loop)
-        self.lock_send = threading.Lock() 
+        self.lock_send = threading.Lock()
 
         self.done = False
-       
+
     def send_connect(self):
         while not self.done:
             print("Connection status: ", self.done)
@@ -68,28 +78,21 @@ class ArUcoDecoder:
         start = 0.0
         end = 1 / 15
         while not self.done and conn:
-            time.sleep(max(0, 1 / 15 - ( end - start )))    
+            time.sleep(max(0, 1 / 15 - (end - start)))
             start = time.time()
             self.lock_send.acquire()
             new_position = self.new_position
             self.new_position = False
             last_pos = self.robot_position
-            img = self.img_to_send
             self.lock_send.release()
 
             if new_position:
                 x_pos, y_pos = last_pos
-                x_pos = bytearray(struct.pack('d', x_pos))
-                y_pos = bytearray(struct.pack('d', y_pos))
+                x_pos = bytearray(struct.pack("d", x_pos))
+                y_pos = bytearray(struct.pack("d", y_pos))
                 data = x_pos + y_pos
-                
-                img = cv2.resize(img, (int(np.shape(img)[1] / 4), int(np.shape(img)[0] / 4)))
-                _, encoded_image = cv2.imencode('.jpg', img)
-                img = bytearray(encoded_image)
-                
-                data = data + img
-                
-                size = bytearray(len(data).to_bytes(length=3, byteorder='big'))
+
+                size = bytearray(len(data).to_bytes(length=3, byteorder="big"))
                 data = size + data
                 try:
                     conn.sendall(data)
@@ -97,7 +100,7 @@ class ArUcoDecoder:
                     conn.close()
                     conn = self.send_connect()
             end = time.time()
-    
+
     def set_cap_prop(self):
         """Camera setting function"""
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAM_W)
@@ -267,15 +270,15 @@ class ArUcoDecoder:
         corners, ids, _ = cv2.aruco.detectMarkers(
             srch_area, self.arucoDict, parameters=self.arucoParams
         )
-        
-        corners = np.asarray(corners)  
+
+        corners = np.asarray(corners)
         if corners.size != 0:
             corners += win_origin
         corners = tuple(corners)
-           
+
         self.draw_corners(corners, ids)
 
-        self.robot_pos_raw = None   # if robot not detected
+        self.robot_pos_raw = None  # if robot not detected
         if ids is not None and 5 in ids:
             # update robot position for local search
             self.robot_pos_raw = self.ref_centers["5"]
@@ -288,7 +291,7 @@ class ArUcoDecoder:
                     self.traj_img = np.zeros(shape, np.uint8)
                 # update trajectory image
                 cv2.circle(self.traj_img, self.ref_centers["5"], 1, (0, 0, 255), -1)
-                
+
                 # blend images
                 alpha = 0.6
                 beta = 1 - 0.6
@@ -315,11 +318,9 @@ class ArUcoDecoder:
             self.lock_send.acquire()
             self.new_position = True
             self.robot_position = (robot[0], robot[1])
-            self.img_to_send = self.img
             self.lock_send.release()
-        
+
         cv2.imshow("Frame", self.resize(source=self.img))
-        #cv2.imshow("warp", self.resize(source=self.img, scale_percent=30))
 
         return
 
@@ -336,7 +337,9 @@ class ArUcoDecoder:
                 cv2.destroyAllWindows()
                 if self.traj:
                     cv2.imwrite(
-                        f"trajectory_" + datetime.now().strftime("%Y%m%d-%H%M%S") + ".png",
+                        f"trajectory_"
+                        + datetime.now().strftime("%Y%m%d-%H%M%S")
+                        + ".png",
                         self.img,
                     )
                 self.done = True
