@@ -12,6 +12,9 @@ import socket
 import threading
 import struct
 
+import subprocess
+
+
 from config import (
     MAP_H_IRL,
     MAP_W_IRL,
@@ -88,9 +91,12 @@ class ArUcoDecoder:
 
             if new_position:
                 x_pos, y_pos = last_pos
-                x_pos = bytearray(struct.pack("d", x_pos))
-                y_pos = bytearray(struct.pack("d", y_pos))
-                data = x_pos + y_pos
+                if last_pos == (None, None):
+                    data = bytearray()
+                else:
+                    x_pos = bytearray(struct.pack("d", x_pos))
+                    y_pos = bytearray(struct.pack("d", y_pos))
+                    data = x_pos + y_pos
 
                 size = bytearray(len(data).to_bytes(length=3, byteorder="big"))
                 data = size + data
@@ -107,6 +113,10 @@ class ArUcoDecoder:
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAM_H)
         self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
         self.cap.set(cv2.CAP_PROP_FOCUS, 0)
+        command = "v4l2-ctl -d " + SOURCE + " -c exposure_absolute=40"
+        print(command)
+        subprocess.check_call("v4l2-ctl -d /dev/video0 -c exposure_auto=1",shell=True)
+        subprocess.check_call("v4l2-ctl -d /dev/video0 -c exposure_absolute=40",shell=True)
 
     def draw_corners(self, corners, ids):
         """Drawing function, adding corners and ids of detected markers onto the displayed feed.
@@ -315,10 +325,23 @@ class ArUcoDecoder:
                 2,
             )
 
-            self.lock_send.acquire()
-            self.new_position = True
-            self.robot_position = (robot[0], robot[1])
-            self.lock_send.release()
+        else:
+            robot = (None, None)
+            cv2.putText(
+                self.img,
+                "Robot's position: ({}, {})".format(robot[0], robot[1]),
+                (30, 60),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                2,
+                (0, 0, 255),
+                2,
+            )
+
+        self.lock_send.acquire()
+        self.new_position = True
+        self.robot_position = (robot[0], robot[1])
+        self.lock_send.release()
+
 
         cv2.imshow("Frame", self.resize(source=self.img))
 
