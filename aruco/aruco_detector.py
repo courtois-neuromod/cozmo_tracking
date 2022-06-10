@@ -389,7 +389,6 @@ def parser():
         default=False,
         help="trajectory drawing boolean",
     )
-    parser.add_argument("-c", "--config", type=str, default="config.py«")
     args = parser.parse_args()
     return args
 
