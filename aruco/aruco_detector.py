@@ -32,7 +32,7 @@ from config import (
 class ArUcoDecoder:
     """ArUco markers decoder class"""
 
-    def __init__(self, traj):
+    def __init__(self, traj, no_socket):
         self.arucoDict = cv2.aruco.Dictionary_get(cv2.aruco.DICT_5X5_100)
         self.arucoParams = cv2.aruco.DetectorParameters_create()
 
@@ -52,15 +52,17 @@ class ArUcoDecoder:
 
         self.robot_position = None
         self.new_position = False
+        self.no_socket = no_socket
 
-        self.sock_send = socket.socket(ADDR_FAMILY, SOCKET_TYPE)
-        self.sock_send.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.sock_send.bind(("", SENDING_PORT))
-        self.sock_send.listen(10)
-        self.sock_send.settimeout(1.5)
+        if not no_socket:
+            self.sock_send = socket.socket(ADDR_FAMILY, SOCKET_TYPE)
+            self.sock_send.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.sock_send.bind(("", SENDING_PORT))
+            self.sock_send.listen(10)
+            self.sock_send.settimeout(1.5)
 
-        self.thread_send = threading.Thread(target=self.send_loop)
-        self.lock_send = threading.Lock()
+            self.thread_send = threading.Thread(target=self.send_loop)
+            self.lock_send = threading.Lock()
 
         self.done = False
 
@@ -113,10 +115,9 @@ class ArUcoDecoder:
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAM_H)
         self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
         self.cap.set(cv2.CAP_PROP_FOCUS, 0)
-        command = "v4l2-ctl -d " + SOURCE + " -c exposure_absolute=40"
-        print(command)
-        subprocess.check_call("v4l2-ctl -d /dev/video0 -c exposure_auto=1",shell=True)
-        subprocess.check_call("v4l2-ctl -d /dev/video0 -c exposure_absolute=40",shell=True)
+
+        subprocess.check_call(f"v4l2-ctl -d {SOURCE} -c exposure_auto=1",shell=True)
+        subprocess.check_call(f"v4l2-ctl -d {SOURCE} -c exposure_absolute=40",shell=True)
 
     def draw_corners(self, corners, ids):
         """Drawing function, adding corners and ids of detected markers onto the displayed feed.
@@ -371,17 +372,24 @@ class ArUcoDecoder:
                 sys.exit()
 
 
-def main(traj):
+def main(traj, no_socket):
     decoder = ArUcoDecoder(traj)
     decoder.calibration()
     decoder.calib = True
-    decoder.thread_send.start()
+    if not no_socket:
+        decoder.thread_send.start()
     time.sleep(1)
     decoder.tracking()
 
 
 def parser():
     parser = argparse.ArgumentParser(description="ArUco detector and tracker.")
+    parser.add_argument(
+        "--no_socket",
+        action="store_true",
+        default=False,
+        help="Do not use socket comm",
+    )
     parser.add_argument(
         "-t",
         "--traj",
@@ -395,4 +403,4 @@ def parser():
 
 if __name__ == "__main__":
     args = parser()
-    main(args.traj)
+    main(args.traj, args.no_socket)
