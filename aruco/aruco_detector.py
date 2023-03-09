@@ -117,7 +117,7 @@ class ArUcoDecoder:
         self.cap.set(cv2.CAP_PROP_FOCUS, 0)
 
         subprocess.check_call(f"v4l2-ctl -d {SOURCE} -c exposure_auto=1",shell=True)
-        subprocess.check_call(f"v4l2-ctl -d {SOURCE} -c exposure_absolute=40",shell=True)
+        #subprocess.check_call(f"v4l2-ctl -d {SOURCE} -c exposure_absolute=40",shell=True)
 
     def draw_corners(self, corners, ids):
         """Drawing function, adding corners and ids of detected markers onto the displayed feed.
@@ -294,20 +294,6 @@ class ArUcoDecoder:
             # update robot position for local search
             self.robot_pos_raw = self.ref_centers["5"]
 
-            # draw traj if needed
-            if self.traj:
-                # create trajectory image
-                if self.traj_img is None:
-                    shape = np.shape(self.img)
-                    self.traj_img = np.zeros(shape, np.uint8)
-                # update trajectory image
-                cv2.circle(self.traj_img, self.ref_centers["5"], 1, (0, 0, 255), -1)
-
-                # blend images
-                alpha = 0.6
-                beta = 1 - 0.6
-                self.img = cv2.addWeighted(self.img, alpha, self.traj_img, beta, 0.0)
-
             robot = np.asarray(self.ref_centers["5"])
             robot = np.append(robot, 1)
 
@@ -338,10 +324,25 @@ class ArUcoDecoder:
                 2,
             )
 
-        self.lock_send.acquire()
-        self.new_position = True
-        self.robot_position = (robot[0], robot[1])
-        self.lock_send.release()
+        if not self.no_socket:
+            self.lock_send.acquire()
+            self.new_position = True
+            self.robot_position = (robot[0], robot[1])
+            self.lock_send.release()
+
+        # draw traj if needed
+        if self.traj:
+            # create trajectory image
+            if self.traj_img is None:
+                shape = np.shape(self.img)
+                self.traj_img = np.zeros(shape, np.uint8)
+            # update trajectory image
+            cv2.circle(self.traj_img, self.ref_centers["5"], 1, (0, 0, 255), -1)
+
+            # blend images
+            alpha = 1
+            beta = 1 - 0.6
+            self.img = cv2.addWeighted(self.img, alpha, self.traj_img, beta, 0.0)
 
 
         cv2.imshow("Frame", self.resize(source=self.img))
@@ -367,13 +368,14 @@ class ArUcoDecoder:
                         self.img,
                     )
                 self.done = True
-                self.thread_send.join()
+                if not self.no_socket:
+                    self.thread_send.join()
                 print("Done.")
                 sys.exit()
 
 
 def main(traj, no_socket):
-    decoder = ArUcoDecoder(traj)
+    decoder = ArUcoDecoder(traj, no_socket)
     decoder.calibration()
     decoder.calib = True
     if not no_socket:
