@@ -77,11 +77,9 @@ class ArUcoDecoder:
 
             if new_position:
                 x_pos, y_pos = last_pos
-                if last_pos == (None, None):
-                    data = [np.nan, np.nan]
-                else:
+                if last_pos != (None, None):
                     data = [x_pos, y_pos]
-                outlet.push_sample(np.array(data, dtype=np.float32))
+                    outlet.push_sample(np.array(data, dtype=np.float32))
 
     def set_cap_prop(self):
         """Camera setting function"""
