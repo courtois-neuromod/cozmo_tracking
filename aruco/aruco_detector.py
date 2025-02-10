@@ -33,8 +33,9 @@ class ArUcoDecoder:
     """ArUco markers decoder class"""
 
     def __init__(self, traj, no_socket):
-        self.arucoDict = cv2.aruco.Dictionary_get(cv2.aruco.DICT_5X5_100)
-        self.arucoParams = cv2.aruco.DetectorParameters_create()
+        self.arucoDict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_5X5_100)
+        self.arucoParams = cv2.aruco.DetectorParameters()
+        self.detector = cv2.aruco.ArucoDetector(self.arucoDict, self.arucoParams)
 
         self.cap = cv2.VideoCapture(SOURCE)
         if self.cap is None or not self.cap.isOpened():
@@ -116,8 +117,8 @@ class ArUcoDecoder:
         self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
         self.cap.set(cv2.CAP_PROP_FOCUS, 0)
 
-        subprocess.check_call(f"v4l2-ctl -d {SOURCE} -c exposure_auto=1",shell=True)
-        #subprocess.check_call(f"v4l2-ctl -d {SOURCE} -c exposure_absolute=40",shell=True)
+        subprocess.check_call(f"v4l2-ctl -d {SOURCE} -c exposure_auto=1", shell=True)
+        # subprocess.check_call(f"v4l2-ctl -d {SOURCE} -c exposure_absolute=40",shell=True)
 
     def draw_corners(self, corners, ids):
         """Drawing function, adding corners and ids of detected markers onto the displayed feed.
@@ -134,7 +135,7 @@ class ArUcoDecoder:
             # flatten the ArUco IDs list
             ids = ids.flatten()
             # loop over the detected ArUCo corners
-            for (markerCorner, markerID) in zip(corners, ids):
+            for markerCorner, markerID in zip(corners, ids):
                 # extract the marker corners (which are always returned in
                 # top-left, top-right, bottom-right, and bottom-left order)
                 corners = markerCorner.reshape((4, 2))
@@ -183,16 +184,15 @@ class ArUcoDecoder:
         return rs_img
 
     def calibration(self):
-        """Initialization function, detecting the 4 ArUco markers located in the corners, and deriving the homography matrix between the camera's and the floor's planes."""
+        """Initialization function, detecting the 4 ArUco markers located in the corners,
+        and deriving the homography matrix between the camera's and the floor's planes."""
 
         # detect the four corner markers
         ids = []
         while ids is None or not all(x in ids for x in [1, 2, 3, 4]):
             _, self.img = self.cap.read()
             self.img = cv2.cvtColor(self.img, cv2.COLOR_BGR2GRAY)
-            (corners, ids, _) = cv2.aruco.detectMarkers(
-                self.img, self.arucoDict, parameters=self.arucoParams
-            )
+            (corners, ids, _) = self.detector.detectMarkers(self.img)
             self.draw_corners(corners, ids)
             cv2.imshow("Calibration", self.resize(source=self.img, scale_percent=100))
             if cv2.waitKey(1) == ord("q"):
@@ -265,12 +265,12 @@ class ArUcoDecoder:
             self.robot_pos_raw = self.ref_centers["5"]
 
     def decode(self):
-        """Decoding function, detecting markers present in the received image, and computing the robot's position in the maze's reference frame."""
+        """Decoding function, detecting markers present in the received image,
+        and computing the robot's position in the maze's reference frame."""
         # local search
         srch_area = self.img
         win_origin = (0, 0)
         if self.robot_pos_raw:
-
             w_min = max(self.robot_pos_raw[0] - SEARCH_W, 0)
             w_max = min(self.robot_pos_raw[0] + SEARCH_W, np.shape(self.img)[1])
             h_min = max(self.robot_pos_raw[1] - SEARCH_H, 0)
@@ -278,9 +278,7 @@ class ArUcoDecoder:
             win_origin = (w_min, h_min)
             srch_area = self.img[h_min:h_max, w_min:w_max]
 
-        corners, ids, _ = cv2.aruco.detectMarkers(
-            srch_area, self.arucoDict, parameters=self.arucoParams
-        )
+        corners, ids, _ = self.detector.detectMarkers(srch_area)
 
         corners = np.asarray(corners)
         if corners.size != 0:
@@ -344,7 +342,6 @@ class ArUcoDecoder:
             beta = 1 - 0.6
             self.img = cv2.addWeighted(self.img, alpha, self.traj_img, beta, 0.0)
 
-
         cv2.imshow("Frame", self.resize(source=self.img))
 
         return
@@ -362,7 +359,7 @@ class ArUcoDecoder:
                 cv2.destroyAllWindows()
                 if self.traj:
                     cv2.imwrite(
-                        f"trajectory_"
+                        "trajectory_"
                         + datetime.now().strftime("%Y%m%d-%H%M%S")
                         + ".png",
                         self.img,
@@ -390,7 +387,7 @@ def parser():
         "--no_socket",
         action="store_true",
         default=False,
-        help="Do not use socket comm",
+        help="Do not use socket communication",
     )
     parser.add_argument(
         "-t",

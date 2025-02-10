@@ -21,9 +21,6 @@ from config import (
     SEARCH_W,
     CAM_W,
     CAM_H,
-    SENDING_PORT,
-    ADDR_FAMILY,
-    SOCKET_TYPE,
     SOURCE,
     SOURCE_ID,
 )
@@ -33,8 +30,9 @@ class ArUcoDecoder:
     """ArUco markers decoder class"""
 
     def __init__(self, traj):
-        self.arucoDict = cv2.aruco.Dictionary_get(cv2.aruco.DICT_5X5_100)
-        self.arucoParams = cv2.aruco.DetectorParameters_create()
+        self.arucoDict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_5X5_100)
+        self.arucoParams = cv2.aruco.DetectorParameters()
+        self.detector = cv2.aruco.ArucoDetector(self.arucoDict, self.arucoParams)
 
         self.cap = cv2.VideoCapture(SOURCE)
         if self.cap is None or not self.cap.isOpened():
@@ -167,9 +165,7 @@ class ArUcoDecoder:
         while ids is None or not all(x in ids for x in [1, 2, 3, 4]):
             _, self.img = self.cap.read()
             self.img = cv2.cvtColor(self.img, cv2.COLOR_BGR2GRAY)
-            (corners, ids, _) = cv2.aruco.detectMarkers(
-                self.img, self.arucoDict, parameters=self.arucoParams
-            )
+            (corners, ids, _) = self.dectector.detectMarkers(self.img)
             self.draw_corners(corners, ids)
             cv2.imshow("Calibration", self.resize(source=self.img, scale_percent=100))
             if cv2.waitKey(1) == ord("q"):
@@ -255,9 +251,7 @@ class ArUcoDecoder:
             win_origin = (w_min, h_min)
             srch_area = self.img[h_min:h_max, w_min:w_max]
 
-        corners, ids, _ = cv2.aruco.detectMarkers(
-            srch_area, self.arucoDict, parameters=self.arucoParams
-        )
+        corners, ids, _ = self.detector.detectMarkers(srch_area)
 
         corners = np.asarray(corners)
         if corners.size != 0:
@@ -338,7 +332,7 @@ class ArUcoDecoder:
                 cv2.destroyAllWindows()
                 if self.traj:
                     cv2.imwrite(
-                        f"trajectory_"
+                        "trajectory_"
                         + datetime.now().strftime("%Y%m%d-%H%M%S")
                         + ".png",
                         self.img,
