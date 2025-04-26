@@ -117,7 +117,8 @@ class ArUcoDecoder:
         self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
         self.cap.set(cv2.CAP_PROP_FOCUS, 0)
 
-        subprocess.check_call(f"v4l2-ctl -d {SOURCE} -c exposure_auto=1", shell=True)
+        # Eventually change the camera exposure
+        # subprocess.check_call(f"v4l2-ctl -d {SOURCE} -c exposure_auto=1", shell=True)
         # subprocess.check_call(f"v4l2-ctl -d {SOURCE} -c exposure_absolute=40",shell=True)
 
     def draw_corners(self, corners, ids):

@@ -165,7 +165,7 @@ class ArUcoDecoder:
         while ids is None or not all(x in ids for x in [1, 2, 3, 4]):
             _, self.img = self.cap.read()
             self.img = cv2.cvtColor(self.img, cv2.COLOR_BGR2GRAY)
-            (corners, ids, _) = self.dectector.detectMarkers(self.img)
+            (corners, ids, _) = self.detector.detectMarkers(self.img)
             self.draw_corners(corners, ids)
             cv2.imshow("Calibration", self.resize(source=self.img, scale_percent=100))
             if cv2.waitKey(1) == ord("q"):
